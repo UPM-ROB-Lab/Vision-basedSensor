@@ -34,7 +34,7 @@ The raw image captured by the internal camera is processed to extract marker cen
   <table>
     <tr>
       <td align="center">
-        <img src="./img/raw_markers.png" alt="Raw Captured Image" width="400"/>
+        <img src="./img/raw_markers.png" alt="Raw Captured Image" width="390"/>
         <br />
         <b>(a) Raw Captured Image</b>
       </td>
