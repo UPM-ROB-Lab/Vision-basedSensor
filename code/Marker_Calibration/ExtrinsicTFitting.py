@@ -3,9 +3,22 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection # 新增：用于绘制相机视锥
 import os
 
-    
+# --- 0. 全局绘图设置 (SCI 风格) ---
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Times New Roman']
+plt.rcParams['font.weight'] = 'bold'          # 全局字体加粗
+plt.rcParams['axes.labelweight'] = 'bold'     # 坐标轴标签加粗
+plt.rcParams['axes.titleweight'] = 'bold'     # 标题加粗
+plt.rcParams['axes.labelsize'] = 12           # 坐标轴字体大小
+plt.rcParams['font.size'] = 12                # 基础字体大小
+plt.rcParams['legend.fontsize'] = 10          # 图例字体大小
+plt.rcParams['xtick.labelsize'] = 10
+plt.rcParams['ytick.labelsize'] = 10
+plt.rcParams['savefig.dpi'] = 300             # 保存分辨率
+
 # --- 从Excel读取内参 ---
 def load_intrinsics_from_excel(filepath):
     """
@@ -49,12 +62,6 @@ def save_extrinsics_to_excel(R_wc, T_wc, error, filepath):
     """
     将外参（世界到相机，相机到世界）和重投影误差保存到Excel文件。
     格式与内参文件保持一致。
-    
-    Args:
-        R_wc (np.ndarray): 世界到相机的旋转矩阵 (3x3)。
-        T_wc (np.ndarray): 世界到相机的平移向量 (3x1)。
-        error (float): 平均重投影误差。
-        filepath (str): 输出的Excel文件路径。
     """
     # 确保输出目录存在
     output_dir = os.path.dirname(filepath)
@@ -223,157 +230,105 @@ def save_camera_coordinates(world_points, marker_ids, R_world_to_cam, T_world_to
     except Exception as e:
         print(f"\nError: Failed to save camera coordinates to '{filepath}'. Reason: {e}")
 
+# --- 【核心修改】SCI 标准绘图函数 ---
 def plot_3d_comparison(world_points, image_points_for_pnp, R_world_to_cam, T_world_to_cam, camera_matrix, title_suffix=""):
-    # (此函数内容保持不变)
+    """
+    绘制世界坐标系下的场景：
+    1. 原始世界点 (World Points)
+    2. 相机姿态 (Camera Pose) - 使用视锥体表示
+    """
     if world_points is None or R_world_to_cam is None or T_world_to_cam is None:
         print("Cannot plot, missing world points or R, T.")
         return
 
-    fig = plt.figure(figsize=(12, 10))
+    fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
 
+    # --- 1. 绘制世界坐标系下的点 (Ground Truth) ---
     wp_plot = world_points.reshape(-1, 3)
-    ax.scatter(wp_plot[:, 0], wp_plot[:, 1], wp_plot[:, 2], c='blue', marker='o', label='Original World Points (Pw)', s=50)
+    ax.scatter(wp_plot[:, 0], wp_plot[:, 1], wp_plot[:, 2], 
+               c='steelblue', marker='o', s=30, alpha=0.8, label='World Points ($P_w$)')
 
-    points_in_camera_frame_list = []
-    for p_w in wp_plot:
-        p_c = R_world_to_cam @ p_w.reshape(3,1) + T_world_to_cam
-        points_in_camera_frame_list.append(p_c.flatten())
-    points_in_camera_frame = np.array(points_in_camera_frame_list)
-    
-    ax.scatter(points_in_camera_frame[:, 0], points_in_camera_frame[:, 1], points_in_camera_frame[:, 2], 
-               c='red', marker='^', label='World Points in Camera Frame (Pc)', s=50)
-
+    # --- 2. 计算相机在世界坐标系下的位置和姿态 ---
+    # 公式: P_c = R * P_w + T  =>  P_w = R^T * (P_c - T)
+    # 相机原点在相机坐标系下是 (0,0,0)，转换到世界坐标系:
     R_cam_to_world = R_world_to_cam.T
     cam_origin_in_world = -R_cam_to_world @ T_world_to_cam
+    
+    # --- 3. 绘制相机视锥体 (Pyramid) ---
+    # 定义相机坐标系下的标准视锥体 (指向 Z 轴正方向)
+    scale = 10.0 # 视锥体大小，根据数据范围调整
+    # 顶点: 镜头中心(0,0,0) 和 底面四个点
+    cam_corners_c = np.array([
+        [0, 0, 0],              # Center
+        [-scale, -scale, scale], # Top-Left
+        [scale, -scale, scale],  # Top-Right
+        [scale, scale, scale],   # Bottom-Right
+        [-scale, scale, scale]   # Bottom-Left
+    ])
+    
+    # 将视锥体变换到世界坐标系
+    cam_corners_w = []
+    for pt in cam_corners_c:
+        # P_w = R^T * P_c + C_w (其中 C_w 是相机在世界的位置)
+        # 或者直接使用逆变换: P_w = R^T * (P_c - T) -> 这里 P_c 是点，T 是平移
+        # 更简单的理解: 旋转点 + 移动到相机位置
+        pt_w = R_cam_to_world @ pt.reshape(3, 1) + cam_origin_in_world
+        cam_corners_w.append(pt_w.flatten())
+    cam_corners_w = np.array(cam_corners_w)
+    
+    # 定义面
+    verts = [
+        [cam_corners_w[0], cam_corners_w[1], cam_corners_w[2]], # Side 1
+        [cam_corners_w[0], cam_corners_w[2], cam_corners_w[3]], # Side 2
+        [cam_corners_w[0], cam_corners_w[3], cam_corners_w[4]], # Side 3
+        [cam_corners_w[0], cam_corners_w[4], cam_corners_w[1]], # Side 4
+        [cam_corners_w[1], cam_corners_w[2], cam_corners_w[3], cam_corners_w[4]] # Base
+    ]
+    
+    # 绘制半透明红色视锥
+    ax.add_collection3d(Poly3DCollection(verts, facecolors='crimson', linewidths=1, edgecolors='darkred', alpha=0.35))
+    
+    # 标记相机中心
     ax.scatter(cam_origin_in_world[0], cam_origin_in_world[1], cam_origin_in_world[2],
-               c='green', marker='s', s=100, label='Camera Origin in World Frame (Cw)')
-    
-    ax.scatter(0, 0, 0, c='black', marker='x', s=100, label='World Origin (0,0,0)')
+               c='red', marker='s', s=50, label='Camera Pose ($C_w$)')
 
-    ax.set_xlabel('X axis')
-    ax.set_ylabel('Y axis')
-    ax.set_zlabel('Z axis')
-    ax.set_title(f'3D Point Comparison {title_suffix}')
-    ax.legend()
-    
-    all_x = np.concatenate((wp_plot[:,0], points_in_camera_frame[:,0], [0, cam_origin_in_world[0,0]]))
-    all_y = np.concatenate((wp_plot[:,1], points_in_camera_frame[:,1], [0, cam_origin_in_world[1,0]]))
-    all_z = np.concatenate((wp_plot[:,2], points_in_camera_frame[:,2], [0, cam_origin_in_world[2,0]]))
-    
-    max_range_val = np.array([all_x.max()-all_x.min(), all_y.max()-all_y.min(), all_z.max()-all_z.min()]).max() 
-    if max_range_val < 1e-6 : max_range_val = 20.0
-    plot_half_range = max_range_val / 2.0
+    # --- 4. 绘制世界坐标原点 ---
+    ax.scatter(0, 0, 0, c='black', marker='x', s=60, label='World Origin (0,0,0)')
 
-    mid_x = (all_x.max()+all_x.min())*0.5
-    mid_y = (all_y.max()+all_y.min())*0.5
-    mid_z = (all_z.max()+all_z.min())*0.5
+    # --- 5. 美化设置 (SCI 风格) ---
+    ax.set_xlabel('X (mm)', labelpad=10, fontweight='bold')
+    ax.set_ylabel('Y (mm)', labelpad=10, fontweight='bold')
+    ax.set_zlabel('Z (mm)', labelpad=10, fontweight='bold')
+    ax.set_title(f'Extrinsic Calibration Result\n(World Frame Visualization)', fontsize=14, pad=15)
     
-    ax.set_xlim(mid_x - plot_half_range, mid_x + plot_half_range)
-    ax.set_ylim(mid_y - plot_half_range, mid_y + plot_half_range)
-    ax.set_zlim(mid_z - plot_half_range, mid_z + plot_half_range)
+    # 去除背景网格和灰色填充，实现干净的白色背景
+    ax.grid(False)
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    ax.xaxis.pane.set_edgecolor('w')
+    ax.yaxis.pane.set_edgecolor('w')
+    ax.zaxis.pane.set_edgecolor('w')
     
-    ax.set_box_aspect([1,1,1]) 
-
-    ax.view_init(elev=20, azim=135)
+    # 设置图例
+    ax.legend(loc='upper right', frameon=True, fancybox=True, framealpha=0.9)
+    
+    # --- 6. 关键：设置等比例坐标轴 (Equal Aspect Ratio) ---
+    # 这一步防止 3D 空间变形
+    all_points = np.vstack([wp_plot, cam_corners_w])
+    X, Y, Z = all_points[:,0], all_points[:,1], all_points[:,2]
+    max_range = np.array([X.max()-X.min(), Y.max()-Y.min(), Z.max()-Z.min()]).max() / 2.0
+    mid_x, mid_y, mid_z = (X.max()+X.min())*0.5, (Y.max()+Y.min())*0.5, (Z.max()+Z.min())*0.5
+    
+    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim(mid_y - max_range, mid_y + max_range)
+    ax.set_zlim(mid_z - max_range, mid_z + max_range)
+    
+    # 调整视角
+    ax.view_init(elev=30, azim=135)
     plt.tight_layout()
     plt.show()
-
-
-# if __name__ == "__main__":
-#     # --- 1. Define File Paths ---
-#     data_folder_path = os.path.join("Results", "data", 'PreprocessPara')
-#     os.makedirs(data_folder_path, exist_ok=True)
-#     print(f"Reading/Writing files from/to: '{data_folder_path}'")
-
-#     # 【修改】定义新的内参文件路径
-#     new_intrinsic_params_path = os.path.join(data_folder_path, 'NewIntrinsic.xlsx')
-#     extrinsic_params_path = os.path.join(data_folder_path, 'ExtrinsicParameters.xlsx')
-    
-#     world_csv_path = os.path.join(data_folder_path, 'world_marker.csv')
-#     pixel_csv_path = os.path.join(data_folder_path, 'pixel_marker.csv')
-    
-#     marker_real_diameter = 3.0
-
-#     # --- 2. Load Intrinsic Parameters from Excel ---
-#     # 【修改】调用新的加载函数，只获取新的内参矩阵
-#     new_camera_matrix = load_new_intrinsics_from_excel(new_intrinsic_params_path)
-    
-#     if new_camera_matrix is None:
-#         print("Exiting due to failure in loading new intrinsic parameters.")
-#         exit()
-
-#     # --- 3. Load 3D-2D correspondences ---
-#     # (这部分保持不变)
-#     world_coords_map = load_world_coordinates_from_csv(world_csv_path)
-#     image_coords_map = load_image_coordinates_from_csv(pixel_csv_path)
-
-#     if world_coords_map is None or image_coords_map is None:
-#         print("Failed to load coordinate data. Exiting.")
-#         exit()
-#     if not world_coords_map or not image_coords_map:
-#         print("Coordinate maps are empty after loading. Exiting.")
-#         exit()
-
-#     common_ids_world = {str(k) for k in world_coords_map.keys()}
-#     common_ids_image = {str(k) for k in image_coords_map.keys()}
-#     common_ids = sorted(list(common_ids_world & common_ids_image), key=lambda x: int(float(x)))
-
-#     if not common_ids:
-#         print("No common marker IDs found between world and image coordinate files.")
-#         exit()
-#     print(f"Found {len(common_ids)} common marker IDs for PnP: {common_ids[:10]}...")
-
-#     object_points_3d_world_list = [world_coords_map[id_val] for id_val in common_ids]
-#     image_points_2d_pixel_list = [image_coords_map[id_val] for id_val in common_ids]
-    
-#     object_points_3d_world_for_pnp = np.array(object_points_3d_world_list, dtype=np.float32)
-#     image_points_2d_pixel_for_pnp = np.array(image_points_2d_pixel_list, dtype=np.float32)
-
-#     # --- 4. Calculate Extrinsic Parameters ---
-#     # 【修改】使用新的内参矩阵和 None 畸变系数进行PnP求解
-#     print("\n--- Calculating extrinsics with NEW camera matrix and NO distortion ---")
-#     R, T, reproj_err = calibrate_camera_extrinsics(
-#         object_points_3d_world_for_pnp,
-#         image_points_2d_pixel_for_pnp,
-#         new_camera_matrix,  # <-- 使用新的内参矩阵
-#         None                # <-- 畸变系数为 None
-#     )
-
-#     # --- 5. Process and Save Results ---
-#     if R is not None and T is not None:
-#         print("\n--- Camera Extrinsic Calibration Results ---")
-#         print("Rotation Matrix (R) - World to Camera:")
-#         print(R)
-#         print("\nTranslation Vector (T) - World to Camera (in units of world coordinates):")
-#         print(T)
-#         print(f"\nMean Reprojection Error: {reproj_err:.4f} pixels")
-        
-#         save_extrinsics_to_excel(R, T, reproj_err, extrinsic_params_path)
-
-#         output_camera_coords_path = os.path.join(data_folder_path, 'camera_marker.csv')
-        
-#         # 【修改】后续所有计算都使用新的内参矩阵
-#         save_camera_coordinates(
-#             object_points_3d_world_for_pnp,
-#             common_ids,
-#             R,
-#             T,
-#             new_camera_matrix, # <-- 使用新的内参矩阵
-#             marker_real_diameter,
-#             output_camera_coords_path
-#         )
-
-#         plot_3d_comparison(
-#             object_points_3d_world_for_pnp,
-#             image_points_2d_pixel_for_pnp,
-#             R,
-#             T,
-#             new_camera_matrix, # <-- 使用新的内参矩阵
-#             title_suffix="(PnP Result with New Intrinsics)"
-#         )
-#     else:
-#         print("\nCamera extrinsic calibration failed.")
 
 
 # 提取未畸变矫正的内参执行pnp算法的程序主模块

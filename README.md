@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This work is based on our 2026 paper titled _**A Novel Bonnet Polishing Approach with a Vision-Based Sensor for In-Situ Characterization of Contact Force and Pose Misalignment**_. We propose an embedded vision-based sensor utilizing inner-surface marker tracking to achieve in-situ perception of the contact state. This approach realizes precise pose error compensation and significant surface quality optimization. Below, we detail the implementation process of our method.
+This work is based on our 2026 paper titled _**A Novel Bonnet Polishing Approach with a Vision-Based Sensor for In-Situ Characterization of Contact Force and Pose Misalignment**_. We propose an embedded vision-based sensor utilizing inner-surface marker tracking to achieve in-situ perception of the contact state. This approach realizes precise pose error compensation and significant surface quality optimization. Supplementary materials are as follows.
 
 ## Dependencies
 
@@ -12,8 +12,6 @@ Our algorithm and data processing modules have been tested with the following en
 *   **Python** (version 3.8+)
 *   **OpenCV** (opencv-python, for image processing and marker extraction)
 *   **NumPy & SciPy** (for numerical calculation and plane fitting)
-*   **Matplotlib** (for 3D displacement field visualization)
-*   **Scikit-learn** (for regression analysis)
 
 Ensure that all dependencies are correctly installed in your environment to run the provided algorithm demos.
 
