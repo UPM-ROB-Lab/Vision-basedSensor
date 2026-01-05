@@ -85,7 +85,7 @@ To ensure measurement reliability, we performed the following two-step accuracy 
       <td align="center">
         <img src="./img/diameter_shot.png" alt="Marker Shot" width="240"/>
         <br />
-        <b>(a) Markers</b>
+        <b>(a) Markers Photo</b>
       </td>
       <td align="center">
         <img src="./img/diameter_histogram.png" alt="Accuracy Histogram" width="590"/>
@@ -105,7 +105,7 @@ To validate the algorithmic accuracy, a precision probe indentation test was per
       <td align="center">
         <img src="./img/Experimental_Platform.png" alt="Probe Indentation Setup" width="240"/>
         <br />
-        <b>(a) Platform</b>
+        <b>(a)Experimental Platform</b>
       </td>
       <td align="center">
         <img src="./img/Sensor_Error_Analysis.png" alt="Stepwise Accuracy" width="540"/>
