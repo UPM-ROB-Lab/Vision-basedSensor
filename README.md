@@ -56,12 +56,12 @@ Based on the 2D feature changes, the 3D displacement vectors are reconstructed u
   <table>
     <tr>
       <td align="center">
-        <img src="./img/intrinsic.png" alt="Intrinsic Calibration" width="200"/>
+        <img src="./img/intrinsic.png" alt="Intrinsic Calibration" width="310"/>
         <br />
         <b>(a) Intrinsic Calibration</b>
       </td>
       <td align="center">
-        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="300"/>
+        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="500"/>
         <br />
         <b>(b) Extrinsic Calibration</b>
       </td>
@@ -83,12 +83,12 @@ To ensure measurement reliability, we performed the following two-step accuracy 
   <table>
     <tr>
       <td align="center">
-        <img src="./img/diameter_shot.png" alt="Marker Shot" width="165"/>
+        <img src="./img/diameter_shot.png" alt="Marker Shot" width="240"/>
         <br />
         <b>(a) Markers</b>
       </td>
       <td align="center">
-        <img src="./img/diameter_histogram.png" alt="Accuracy Histogram" width="385"/>
+        <img src="./img/diameter_histogram.png" alt="Accuracy Histogram" width="590"/>
         <br />
         <b>(b) Diameter Estimation Accuracy</b>
       </td>
@@ -103,12 +103,12 @@ To validate the algorithmic accuracy, a precision probe indentation test was per
   <table>
     <tr>
       <td align="center">
-        <img src="./img/Experimental_Platform.png" alt="Probe Indentation Setup" width="188"/>
+        <img src="./img/Experimental_Platform.png" alt="Probe Indentation Setup" width="240"/>
         <br />
         <b>(a) Platform</b>
       </td>
       <td align="center">
-        <img src="./img/Sensor_Error_Analysis.png" alt="Stepwise Accuracy" width="400"/>
+        <img src="./img/Sensor_Error_Analysis.png" alt="Stepwise Accuracy" width="540"/>
         <br />
         <b>(b) Sensor Error Analysis</b>
       </td>
