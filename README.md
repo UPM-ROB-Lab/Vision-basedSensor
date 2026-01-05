@@ -61,7 +61,7 @@ Based on the 2D feature changes, the 3D displacement vectors are reconstructed u
         <b>(a) Intrinsic Calibration</b>
       </td>
       <td align="center">
-        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="230"/>
+        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="300"/>
         <br />
         <b>(b) Extrinsic Calibration</b>
       </td>
@@ -83,12 +83,12 @@ To ensure measurement reliability, we performed the following two-step accuracy 
   <table>
     <tr>
       <td align="center">
-        <img src="./img/diameter_shot.png" alt="Marker Shot" width="350"/>
+        <img src="./img/diameter_shot.png" alt="Marker Shot" width="165"/>
         <br />
-        <b>(a) Single Marker Imaging</b>
+        <b>(a) Markers</b>
       </td>
       <td align="center">
-        <img src="./img/diameter_histogram.png" alt="Accuracy Histogram" width="350"/>
+        <img src="./img/diameter_histogram.png" alt="Accuracy Histogram" width="385"/>
         <br />
         <b>(b) Diameter Estimation Accuracy</b>
       </td>
@@ -97,20 +97,20 @@ To ensure measurement reliability, we performed the following two-step accuracy 
 </div>
 
 #### 2. Mechanical Validation (Probe Indentation)
-To validate the algorithmic accuracy, a precision probe indentation test was performed. The tool was pressed in **steps of 0.7 mm (10 steps)**. The comparison between the prescribed probe depth and the algorithm-calculated displacement is shown below.
+To validate the algorithmic accuracy, a precision probe indentation test was performed. The tool was pressed in **steps of 0.7 mm (12 steps)**. The comparison between the prescribed probe depth and the algorithm-calculated displacement is shown below.
 
 <div align="center">
   <table>
     <tr>
       <td align="center">
-        <img src="./images/probe_setup.png" alt="Probe Indentation Setup" width="350"/>
+        <img src="./img/Experimental_Platform.png" alt="Probe Indentation Setup" width="188"/>
         <br />
-        <b>(a) Single-Point Indentation Setup</b>
+        <b>(a) Platform</b>
       </td>
       <td align="center">
-        <img src="./images/stepwise_accuracy.png" alt="Stepwise Accuracy" width="350"/>
+        <img src="./img/Sensor_Error_Analysis.png" alt="Stepwise Accuracy" width="400"/>
         <br />
-        <b>(b) Stepwise Displacement Validation (0.7mm/step)</b>
+        <b>(b) Sensor Error Analysis</b>
       </td>
     </tr>
   </table>
