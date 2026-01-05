@@ -32,14 +32,14 @@ The raw image captured by the internal camera is processed to extract marker cen
   <table>
     <tr>
       <td align="center">
-        <img src="./img/raw_markers.png" alt="Raw Captured Image" width="390"/>
+        <img src="./img/raw_markers.png" alt="Raw Captured Image" width="400"/>
         <br />
         <b>(a) Raw Captured Image</b>
       </td>
       <td align="center">
         <img src="./img/2d_visualization.png" alt="2D Recognition Result" width="400"/>
         <br />
-        <b>(b) 2D Recognition & ID Assignment</b>
+        <b>(b) 2D Recognition</b>
       </td>
     </tr>
   </table>
@@ -56,13 +56,14 @@ Based on the 2D feature changes, the 3D displacement vectors are reconstructed u
   <table>
     <tr>
       <td align="center">
-        <img src="./img/intrinsic.png" alt="Intrinsic Calibration" width="400"/>
+        <img src="./img/intrinsic.png" alt="Intrinsic Calibration" width="200"/>
         <br />
-        <b>(a) Intrinsic Calibration Accuracy</b>
+        <b>(a) Intrinsic Calibration</b>
       </td>
       <td align="center">
+        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="230"/>
         <br />
-        <b>(b) Extrinsic Pose Alignment</b>
+        <b>(b) Extrinsic Calibration</b>
       </td>
     </tr>
   </table>
