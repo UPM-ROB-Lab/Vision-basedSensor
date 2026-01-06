@@ -56,12 +56,12 @@ Based on the 2D feature changes, the 3D displacement vectors are reconstructed u
   <table>
     <tr>
       <td align="center">
-        <img src="./img/intrinsic.png" alt="Intrinsic Calibration" width="310"/>
+        <img src="./img/intrinsic.png" alt="Intrinsic Calibration" width="325"/>
         <br />
         <b>(a) Intrinsic Calibration</b>
       </td>
       <td align="center">
-        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="500"/>
+        <img src="./img/extrinsic.png" alt="Extrinsic Calibration" width="490"/>
         <br />
         <b>(b) Extrinsic Calibration</b>
       </td>
@@ -119,7 +119,7 @@ To validate the algorithmic accuracy, a precision probe indentation test was per
 ### D. Pose Misalignment Identification
 This module implements the "Reference State Comparison" strategy. By analyzing the deviation of the 3D displacement field, a spatial contact plane is fitted to identify the tilt angle.
 
-![Pose Fitting Result](./images/pose_fitting_placeholder.png)
+![Pose Fitting Result](./img/MarkerDistribution1.png)
 *(Figure: Visualization of the pose deviation vectors and the final fitted contact plane, indicating the magnitude and direction of the misalignment.)*
 
 ## 3. Vision-based Sensor Operation Demos
