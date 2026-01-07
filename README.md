@@ -10,25 +10,25 @@ To validate the in-situ characterization methodology proposed in the paper, a vi
 
 ![Hardware System Overview](./img/hardware_prototype.png)
 
-## 2. Algorithm Pipeline & Validation
+## 2. Algorithm Verification
 
 The data processing pipeline transforms raw visual signals into quantitative contact state information through four sequential stages. Below, we detail the implementation and validation results for each stage.
 
 ### A. 2D Feature Extraction (Sub-pixel Capture)
-The raw image captured by the internal camera is processed to extract marker centroids and IDs. The specific implementation of this algorithm is available in [`marker_extraction.py`](./Algorithm/marker_extraction.py). The figure below compares the **raw captured image** (Left) with the **recognized 2D marker array** (Right), showing the extracted centroids, IDs, and fitted elliptical boundaries.
+The raw image captured by the internal camera is processed to extract marker centroids and IDs. The specific implementation of this algorithm is available in [`marker_extraction.py`](./Algorithm/marker_extraction.py). The figure below compares the **dynamic 2D feature extraction process** (Left) and the **recognized 2D marker array** (Right).
 
 <div align="center">
   <table>
     <tr>
       <td align="center">
-        <img src="./img/raw_markers.png" alt="Raw Captured Image" width="400"/>
+        <img src="./images/2d_dynamic_capture.gif" alt="Dynamic 2D Feature Extraction" width="400"/>
         <br />
-        <b>(a) Raw Captured Image</b>
+        <b>(a) Dynamic 2D Feature Extraction</b>
       </td>
       <td align="center">
         <img src="./img/2d_visualization.png" alt="2D Recognition Result" width="400"/>
         <br />
-        <b>(b) 2D Recognition</b>
+        <b>(b) 2D Recognition (Static Frame)</b>
       </td>
     </tr>
   </table>
@@ -37,9 +37,9 @@ The raw image captured by the internal camera is processed to extract marker cen
 ### B. 3D Displacement Field Reconstruction
 Based on the 2D feature changes, the 3D displacement vectors are reconstructed using geometric constraints. The complete reconstruction pipeline is provided in the [`Marker_Calibration`](./Marker_Calibration) directory, which includes:
 
-*   **Intrinsic Matrix Fitting:** [`intrinsic_calibration.py`](./Marker_Calibration/intrinsic_calibration.py) for camera parameter estimation. The mean reprojection error is **0.xx pixels**, as visualized in **Figure (a)** below.
-*   **Extrinsic Matrix Fitting:** [`extrinsic_calibration.py`](./Marker_Calibration/extrinsic_calibration.py) for coordinate system alignment. The fitting residual is minimized to **0.xx pixels**, as demonstrated in **Figure (b)** below.
-*   **3D Reconstruction:** [`3d_reconstruction.py`](./Marker_Calibration/3d_reconstruction.py) for resolving the spatial displacement field.
+*   **Intrinsic Matrix Fitting:** [`intrinsic_calibration.py`](./Marker_Calibration/intrinsic_calibration.py) for camera parameter estimation. (**Figure (a)**)
+*   **Extrinsic Matrix Fitting:** [`extrinsic_calibration.py`](./Marker_Calibration/extrinsic_calibration.py) for coordinate system alignment. (**Figure (b)**)
+*   **3D Reconstruction:** [`3d_reconstruction.py`](./Marker_Calibration/3d_reconstruction.py) for resolving the spatial displacement field. (**Figure (c)**)
 
 <div align="center">
   <table>
@@ -63,7 +63,7 @@ The figure below visualizes the resulting **3D displacement vector field**, illu
 ![3D Vector Field](./images/3d_vector_placeholder.png)
 *(Note: Visualization of the 3D displacement vectors. Blue indicates the initial position, and Red indicates the displaced position.)*
 
-### C. Accuracy Validation
+### C. Precision Validation
 To ensure measurement reliability, we performed the following two-step accuracy validation:
 
 #### 1. Geometric Validation (Marker Diameter)
