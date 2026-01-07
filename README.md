@@ -21,7 +21,7 @@ The raw image captured by the internal camera is processed to extract marker cen
   <table>
     <tr>
       <td align="center">
-        <img src="./images/2d_dynamic_capture.gif" alt="Dynamic 2D Feature Extraction" width="400"/>
+        <img src="./img/2d_dynamic_capture.gif" alt="Dynamic 2D Feature Extraction" width="380"/>
         <br />
         <b>(a) Dynamic 2D Feature Extraction</b>
       </td>
@@ -123,12 +123,10 @@ In this scenario, the bonnet tool is pressed vertically against the workpiece ($
     <tr>
       <th align="center">Physical Setup</th>
       <th align="center">Internal Camera View (Raw)</th>
-      <th align="center">Reconstructed Plane</th>
     </tr>
     <tr>
-      <td align="center"><img src="./images/vertical_setup.jpg" width="250"/></td>
-      <td align="center"><img src="./images/vertical_camera.gif" width="250"/></td>
-      <td align="center"><img src="./images/vertical_plane.png" width="250"/></td>
+      <td align="center"><img src="./img/vertical_setup.jpg" width="400"/></td>
+      <td align="center"><img src="./img/vertical_compression.gif" width="400"/></td>
     </tr>
   </table>
 </div>
@@ -141,12 +139,10 @@ In this scenario, the tool is pressed against the workpiece surface at a standar
     <tr>
       <th align="center">Physical Setup</th>
       <th align="center">Internal Camera View (Raw)</th>
-      <th align="center">Reconstructed Plane</th>
     </tr>
     <tr>
-      <td align="center"><img src="./images/tilted_setup.jpg" width="250"/></td>
-      <td align="center"><img src="./images/tilted_camera.gif" width="250"/></td>
-      <td align="center"><img src="./images/tilted_plane.png" width="250"/></td>
+      <td align="center"><img src="./img/tilted_setup.jpg" width="400"/></td>
+      <td align="center"><img src="./img/tilted_compression.gif" width="400"/></td>
     </tr>
   </table>
 </div>
@@ -161,8 +157,8 @@ This demo shows the sensor operation during the actual polishing process. The hi
       <th align="center">Internal Camera View (Dynamic)</th>
     </tr>
     <tr>
-      <td align="center"><img src="./images/polishing_process.gif" width="380"/></td>
-      <td align="center"><img src="./images/polishing_camera.gif" width="380"/></td>
+      <td align="center"><img src="./img/polishing_process.gif" width="400"/></td>
+      <td align="center"><img src="./img/dynamic_polishing.gif" width="400"/></td>
     </tr>
   </table>
 </div>
