@@ -205,12 +205,12 @@ The following figures further demonstrate the stability of the displacement extr
   <table>
     <tr>
       <td align="center">
-        <img src="./img/total_marker_displacement.png" alt="Total Marker Displacement (Filtered)" width="400"/>
+        <img src="./img/total_marker_displacement.png" alt="Total Marker Displacement (Filtered)" width="307"/>
         <br />
         <b>Figure 11 (a): Total Marker Displacement.</b>
       </td>
       <td align="center">
-        <img src="./img/point_polishing.png" alt="Amplitude Displacement of Individual Markers" width="400"/>
+        <img src="./img/point_polishing.png" alt="Amplitude Displacement of Individual Markers" width="493"/>
         <br />
         <b>Figure 11 (b): Amplitude Displacement of Individual Markers.</b>
       </td>
