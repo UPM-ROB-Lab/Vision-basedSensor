@@ -75,7 +75,7 @@ Based on the 2D feature changes, the 3D displacement vectors are reconstructed u
 The figure below visualizes the resulting **3D displacement vector field**.
 
 <div align="center">
-  <img src="./images/3d_vector_placeholder.png" alt="3D Displacement Vector Field" width="700"/>
+  <img src="./img/3d_vector_placeholder.png" alt="3D Displacement Vector Field" width="700"/>
   <br />
   <b>Figure 4 (c): 3D Displacement Vector Field.</b>
 </div>
