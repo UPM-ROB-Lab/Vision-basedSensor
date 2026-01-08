@@ -139,64 +139,27 @@ This module implements the "Reference State Comparison" strategy. By analyzing t
 This section demonstrates the vision-based sensor's response under different contact conditions.
 
 ### A. Vertical Compression
-In this scenario, the bonnet tool is pressed vertically against the workpiece ($\psi = 0^\circ$). Figure 8 illustrates the physical setup and the internal camera view during vertical compression.
+In this scenario, the bonnet tool is pressed vertically against the workpiece ($\psi = 0^\circ$). Figure 8 illustrates the outside view and the internal camera view during vertical compression.
 
 <div align="center">
-  <table>
-    <tr>
-      <th align="center">Physical Setup</th>
-      <th align="center">Internal Camera View (Raw)</th>
-    </tr>
-    <tr>
-      <td align="center"><img src="./img/vertical_setup.jpg" width="380"/></td>
-      <td align="center"><img src="./img/vertical_compression.gif" width="380"/></td>
-    </tr>
-  </table>
-</div>
-<div align="center">
-  <b>Figure 8: Vertical Compression Demo.</b>
+  <img src="./img/vertical_compression.gif" width="800"/>
+  <div><b>Figure 8: Vertical Compression Demo.</b></div>
 </div>
 
 ### B. Tilted Compression
 In this scenario, the tool is pressed against the workpiece surface at a standard polishing precession angle of **15°**. The sensor captures the asymmetric marker displacement characteristic of this pose, which serves as the reference state for subsequent misalignment detection. Figure 9 illustrates the physical setup and the internal camera view during tilted compression.
 
 <div align="center">
-  <table>
-    <tr>
-      <th align="center">Physical Setup</th>
-      <th align="center">Internal Camera View (Raw)</th>
-    </tr>
-    <tr>
-      <td align="center"><img src="./img/tilted_setup.jpg" width="380"/></td>
-      <td align="center"><img src="./img/tilted_compression.gif" width="380"/></td>
-    </tr>
-  </table>
-</div>
-<div align="center">
-  <b>Figure 9: Tilted Compression Demo.</b>
+  <img src="./img/tilted_compression.gif" width="800"/>
+  <div><b>Figure 9: Tilted Compression Demo.</b></div>
 </div>
 
 ### C. Dynamic Polishing Process
 This demo shows the sensor operation during the polishing process. The high-speed camera captures stable marker features despite the rotation, validating the robustness of the imaging module. Figure 10 illustrates the polishing process and the dynamic internal camera view.
 
 <div align="center">
-  <table>
-    <tr>
-      <th align="center">Polishing Process</th>
-      <th align="center">Internal Camera View (Dynamic)</th>
-    </tr>
-    <tr>
-      <td align="center">
-        <img src="./img/polishing_process.gif" width="380"/>
-      </td>
-      <td align="center">
-        <img src="./img/dynamic_polishing.gif" width="380"/>
-      </td>
-    </tr>
-  </table>
-</div>
-<div align="center">
-  <b>Figure 10: Dynamic Polishing Process Demo.</b>
+  <img src="./img/dynamic_polishing.gif" width="800"/>
+  <div><b>Figure 10: Dynamic Polishing Process Demo.</b></div>
 </div>
 
 The following figures further demonstrate the stability of the displacement extracted by our algorithms during the dynamic polishing process.
