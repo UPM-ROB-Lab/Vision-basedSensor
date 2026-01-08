@@ -1,160 +1,230 @@
 #!/usr/bin/env python3
 import cv2
-import os
 import time
+import threading
+import os
 import sys
-from datetime import datetime
-from rpi_ws281x import PixelStrip, Color
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+import numpy as np
 
-# Configuration
-VIDEO_SAVE_DIR = "/home/zfy/EXP/video"
-RESOLUTION = (640, 480)
-FPS = 15
-LED_COUNT = 12
-LED_PIN = 18
-LED_BRIGHTNESS = 20
+# Import rpi_ws281x library with fallback
+try:
+    from rpi_ws281x import PixelStrip, Color
+except ImportError:
+    # Fallback for non-Raspberry Pi environments
+    class PixelStrip:
+        def __init__(self, *args, **kwargs):
+            print("[WARNING] rpi_ws281x not found. LED control will be simulated.")
+        def begin(self): pass
+        def setPixelColor(self, i, color): pass
+        def show(self): pass
+        def numPixels(self): return 12
+    class Color:
+        def __init__(self, r, g, b): pass
 
-def check_sudo():
-    """Verify script is run with sudo"""
-    if os.geteuid() != 0:
-        print("\n[ERROR] This script requires root privileges")
-        print("Please run with sudo:\n")
-        print("sudo python3 collect_marker_data.py\n")
-        sys.exit(1)
+# Configuration constants
+CONFIG = {
+    'CAMERA_INDEX': 0,      # Try different indices (0,1,2) to find your camera
+    'WIDTH': 640,           # Video width
+    'HEIGHT': 480,          # Video height
+    'FPS': 12,              # Target frame rate
+    'PORT': 8081,           # Server port
+    'SKIP_FRAMES': 1,       # Frame skip count (reduces CPU usage)
+    'LED_COUNT': 12,        # Number of LED lights
+    'LED_PIN': 18,          # GPIO pin for LEDs
+    'LED_BRIGHTNESS': 20    # LED brightness (0-255)
+}
 
-def initialize_leds():
-    """Initialize LED strip with error handling"""
-    try:
-        strip = PixelStrip(LED_COUNT, LED_PIN, brightness=LED_BRIGHTNESS)
-        strip.begin()
-        return strip
-    except Exception as e:
-        print(f"[LED ERROR] Initialization failed: {str(e)}")
-        print("Troubleshooting:")
-        print("1. Check physical wiring connections")
-        print("2. Verify sufficient power supply (5V 2A+)")
-        print("3. Confirm correct GPIO pin configuration")
-        sys.exit(1)
-
-def set_all_white(strip):
-    """Set all LEDs to white"""
-    try:
-        for i in range(strip.numPixels()):
-            strip.setPixelColor(i, Color(255, 255, 255))
-        strip.show()
-    except Exception as e:
-        print(f"[LED ERROR] Color setting failed: {str(e)}")
-
-def turn_off_leds(strip):
-    """Turn off all LEDs"""
-    try:
-        for i in range(strip.numPixels()):
-            strip.setPixelColor(i, Color(0, 0, 0))
-        strip.show()
-    except:
-        pass  # Silent fail during cleanup
-
-def setup_camera():
-    """Initialize camera with error handling"""
-    try:
-        cap = cv2.VideoCapture("/dev/video0", cv2.CAP_V4L2)
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, RESOLUTION[0])
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, RESOLUTION[1])
-        cap.set(cv2.CAP_PROP_FPS, FPS)
-        
-        if not cap.isOpened():
-            raise RuntimeError("Camera initialization failed")
-        
-        actual_res = (
-            int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-            int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        )
-        actual_fps = cap.get(cv2.CAP_PROP_FPS)
-        
-        print(f"[CAMERA] Configured: {RESOLUTION[0]}x{RESOLUTION[1]} @ {FPS}fps")
-        print(f"[CAMERA] Actual: {actual_res[0]}x{actual_res[1]} @ {actual_fps:.1f}fps")
-        
-        return cap, actual_res
-        
-    except Exception as e:
-        print(f"[CAMERA ERROR] {str(e)}")
-        print("Troubleshooting:")
-        print("1. Run: v4l2-ctl --list-devices")
-        print("2. Test with: ffplay -f v4l2 /dev/video0")
-        sys.exit(1)
-
-def record_session():
-    """Main recording function"""
-    check_sudo()  # Enforce root privileges
+class LEDController:
+    """Handles LED strip initialization and control"""
     
-    # Initialize hardware
-    led_strip = initialize_leds()
-    set_all_white(led_strip)
-    camera, resolution = setup_camera()
+    def __init__(self):
+        self.strip = self._initialize_strip()
+        
+    def _initialize_strip(self):
+        """Initialize the LED strip"""
+        try:
+            strip = PixelStrip(
+                CONFIG['LED_COUNT'],
+                CONFIG['LED_PIN'],
+                brightness=CONFIG['LED_BRIGHTNESS']
+            )
+            strip.begin()
+            return strip
+        except Exception as e:
+            print(f"[LED ERROR] Initialization failed: {str(e)}")
+            return None
     
-    # ========================== MODIFICATION START ==========================
-    # Discard first 100 frames to allow camera to stabilize
-    print("[STATUS] Discarding first 100 frames for camera warm-up...")
-    for _ in range(100):
-        camera.read()
-    print("[STATUS] Camera stabilized. Starting recording...")
-    # ========================== MODIFICATION END ============================
+    def set_all_white(self):
+        """Set all LEDs to white"""
+        if not self.strip:
+            return
+        try:
+            for i in range(self.strip.numPixels()):
+                self.strip.setPixelColor(i, Color(255, 255, 255))
+            self.strip.show()
+        except Exception as e:
+            print(f"[LED WARNING] Failed to set white: {str(e)}")
+    
+    def turn_off(self):
+        """Turn off all LEDs"""
+        if not self.strip:
+            return
+        try:
+            for i in range(self.strip.numPixels()):
+                self.strip.setPixelColor(i, Color(0, 0, 0))
+            self.strip.show()
+        except Exception as e:
+            print(f"[LED WARNING] Failed to turn off: {str(e)}")
 
-    # Create output file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = os.path.join(VIDEO_SAVE_DIR, f"marker_data_{timestamp}.avi")
-    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    out = cv2.VideoWriter(filename, fourcc, FPS, resolution)
-
-    print(f"\n[STATUS] Recording to: {filename}")
-    print("Press CTRL+C to stop\n")
-
-    frame_count = 0
-    start_time = time.time()
-
-    try:
-        while True:
-            ret, frame = camera.read()
-            if not ret:
-                print("[WARNING] Frame capture failed!")
-                break
-
-            out.write(frame)
+class CameraHandler:
+    """Handles camera initialization, frame capture, and streaming"""
+    
+    def __init__(self, led_controller):
+        self.led_controller = led_controller
+        self.cap = None
+        self.frame = None
+        self.running = True
+        self._init_camera()
+    
+    def _init_camera(self):
+        """Initialize the camera device"""
+        # Turn on LEDs before camera initialization
+        self.led_controller.set_all_white()
+        time.sleep(1)  # Wait for light stabilization
+        
+        for _ in range(3):  # Try 3 times
+            self.cap = cv2.VideoCapture(CONFIG['CAMERA_INDEX'], cv2.CAP_V4L2)
+            if self.cap.isOpened():
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CONFIG['WIDTH'])
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CONFIG['HEIGHT'])
+                self.cap.set(cv2.CAP_PROP_FPS, CONFIG['FPS'])
+                print(f"Camera initialized at {CONFIG['WIDTH']}x{CONFIG['HEIGHT']} @ {CONFIG['FPS']}fps")
+                return
+            time.sleep(1)
+        
+        print(f"[WARNING] Failed to open camera /dev/video{CONFIG['CAMERA_INDEX']}, using test pattern")
+        self.cap = None
+    
+    def capture_loop(self):
+        """Main frame capture loop"""
+        frame_count = 0
+        while self.running:
+            if self.cap and self.cap.isOpened():
+                ret, frame = self.cap.read()
+                if not ret:
+                    time.sleep(0.1)
+                    continue
+            else:
+                frame = self._generate_test_frame()
+                time.sleep(1.0 / CONFIG['FPS'])
+                frame_count += 1
+                continue
+            
             frame_count += 1
+            if frame_count % (CONFIG['SKIP_FRAMES'] + 1) != 0:
+                continue
+                
+            _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            self.frame = jpeg.tobytes()
+    
+    def _generate_test_frame(self):
+        """Generate a test frame when camera is unavailable"""
+        img = np.zeros((CONFIG['HEIGHT'], CONFIG['WIDTH'], 3), np.uint8)
+        cv2.putText(
+            img, "NO CAMERA", 
+            (50, CONFIG['HEIGHT']//2), 
+            cv2.FONT_HERSHEY_SIMPLEX, 2, 
+            (255, 255, 255), 3
+        )
+        return img
+    
+    def get_frame(self):
+        """Get the current frame"""
+        return self.frame if self.frame is not None else self._generate_encoded_test_frame()
+    
+    def _generate_encoded_test_frame(self):
+        """Generate and encode a test frame"""
+        _, jpeg = cv2.imencode('.jpg', self._generate_test_frame())
+        return jpeg.tobytes()
 
-            # Print status every 5 seconds
-            if time.time() - start_time >= 5 and frame_count % 5 == 0:
-                elapsed = time.time() - start_time
-                current_fps = frame_count / elapsed
-                print(f"[STATUS] Frames: {frame_count} | FPS: {current_fps:.1f}")
+class StreamingRequestHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for video streaming"""
+    
+    def do_GET(self):
+        if self.path == '/':
+            self._serve_home_page()
+        elif self.path == '/stream':
+            self._serve_video_stream()
+        else:
+            self.send_error(404)
+    
+    def _serve_home_page(self):
+        """Serve the HTML page with video stream"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        html = f'''
+            <html><body>
+            <img src="/stream" width="{CONFIG['WIDTH']}">
+            <p>Camera Stream {CONFIG['WIDTH']}x{CONFIG['HEIGHT']} @ {CONFIG['FPS']}fps</p>
+            </body></html>
+        '''
+        self.wfile.write(html.encode())
+    
+    def _serve_video_stream(self):
+        """Serve the MJPEG video stream"""
+        self.send_response(200)
+        self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=frame')
+        self.end_headers()
+        try:
+            while True:
+                frame = camera_handler.get_frame()
+                self.wfile.write(
+                    b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + 
+                    frame + b'\r\n'
+                )
+                time.sleep(1.0 / max(1, CONFIG['FPS']))
+        except (ConnectionError, BrokenPipeError):
+            pass
 
+class StreamingServer(ThreadingMixIn, HTTPServer):
+    """Threaded HTTP server for video streaming"""
+    daemon_threads = True
+
+def run_server():
+    """Main function to run the streaming server"""
+    global camera_handler
+    
+    # Require root privileges
+    if os.geteuid() != 0:
+        print("\n[ERROR] This script requires root privileges. Please run with:")
+        print("sudo python3 your_script_name.py")
+        sys.exit(1)
+    
+    # Initialize components
+    led_controller = LEDController()
+    camera_handler = CameraHandler(led_controller)
+    
+    # Start capture thread
+    threading.Thread(target=camera_handler.capture_loop, daemon=True).start()
+    
+    # Start server
+    print(f"\nServer started: http://0.0.0.0:{CONFIG['PORT']}")
+    print(f"On your Windows machine, access: http://<RaspberryPi_IP>:{CONFIG['PORT']}")
+    
+    try:
+        StreamingServer(('0.0.0.0', CONFIG['PORT']), StreamingRequestHandler).serve_forever()
     except KeyboardInterrupt:
-        print("\n[STATUS] Stopping recording...")
-
+        print("\nShutting down server...")
     finally:
-        # Calculate metrics
-        total_time = time.time() - start_time
-        avg_fps = frame_count / total_time if total_time > 0 else 0
+        # Cleanup
+        camera_handler.running = False
+        if camera_handler.cap:
+            camera_handler.cap.release()
+        led_controller.turn_off()
 
-        # Release resources
-        camera.release()
-        out.release()
-        turn_off_leds(led_strip)
-        
-        print(f"理论应保存帧数: {int(total_time * FPS)}")
-        print(f"实际保存帧数: {frame_count}")
-
-        # Summary report
-        print("\n[SUMMARY]")
-        print(f"Duration: {total_time:.1f}s")
-        print(f"Frames captured: {frame_count}")
-        print(f"Average FPS: {avg_fps:.1f}")
-        print(f"File saved: {filename}")
-        print(f"File size: {os.path.getsize(filename)/1024:.1f} KB")
-
-if __name__ == "__main__":
-    print("="*50)
-    print("MARKER DATA COLLECTION SYSTEM")
-    print("="*50)
-    record_session()
+if __name__ == '__main__':
+    run_server()
