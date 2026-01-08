@@ -8,251 +8,252 @@ from marker_circle import find_marker, marker_center
 import math
 
 def process_video():
-    """自动处理视频，并将数据保存到CSV，其中Ox,Oy为第一帧的初始位置。"""
+    """Automatically process video to track circular marker array and save trajectory data.
     
-    # 输入输出路径配置
-    video_dir = './video'
-    input_path = os.path.join(video_dir, 'test2.avi')
-    output_video_path = os.path.join(video_dir, 'exp_processed.avi')
-    output_csv_path = os.path.join(video_dir, 'marker_locations_0.csv')
-
-    # 使用与照片处理完全相同的裁剪参数 (左, 右, 上, 下)
-    # crop_ratios = (1/8, 1/8, 0, 1/16)  # 5*5阵列裁剪系数
-    crop_ratios = (1/8, 1/8, 1/16, 0) # 环形阵列裁剪系数
+    Output CSV columns:
+    - frameno: Frame number
+    - row: Layer index (0=center, increasing outward)
+    - col: Angular position index (0 starts at positive x-axis, increments CCW)
+    - Ox,Oy: Original position in first frame (reference)
+    - Cx,Cy: Current position
+    - major_axis,minor_axis: Ellipse parameters
+    - angle: Ellipse orientation angle
     
-    # 确保视频目录存在
-    os.makedirs(video_dir, exist_ok=True)
+    Visual output shows:
+    - Detected markers (red)
+    - Displacement vectors (red arrows)  
+    - Major/minor axes (yellow/blue)
+    """
     
-    # 初始化视频捕获
-    cap = cv2.VideoCapture(input_path)
+    # --------- Configuration ---------
+    VIDEO_DIR = './video'
+    INPUT_VIDEO = os.path.join(VIDEO_DIR, 'test2.avi')
+    OUTPUT_VIDEO = os.path.join(VIDEO_DIR, 'exp_processed.avi') 
+    OUTPUT_CSV = os.path.join(VIDEO_DIR, 'marker_locations_0.csv')
+    
+    # Crop ratios - adjust based on marker array geometry
+    CROP_RATIOS = (1/8, 1/8, 1/16, 0)  # Left, Right, Top, Bottom
+    
+    # Marker tracking parameters
+    MIN_MARKER_DISTANCE = 20  # Minimum distance between markers (pixels)
+    NUM_OUTER_LAYERS = 5      # Number of concentric circles in array
+    
+    # Visualization settings
+    MARKER_COLOR = (0, 0, 255)    # Red
+    VECTOR_COLOR = (0, 0, 255)    # Red 
+    MAJOR_AXIS_COLOR = (0, 255, 0) # Green
+    MINOR_AXIS_COLOR = (255, 0, 0) # Blue
+    
+    # --------- Setup ---------
+    os.makedirs(VIDEO_DIR, exist_ok=True)
+    
+    # Initialize video capture
+    cap = cv2.VideoCapture(INPUT_VIDEO)
     if not cap.isOpened():
-        raise FileNotFoundError(f"无法打开视频文件: {input_path}")
+        raise FileNotFoundError(f"Could not open video: {INPUT_VIDEO}")
     
-    # 获取原始视频参数
+    # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # 计算裁剪后的尺寸
-    left = int(width * crop_ratios[0])
-    right = width - int(width * crop_ratios[1])
-    top = int(height * crop_ratios[2])
-    bottom = height - int(height * crop_ratios[3])
+    # Calculate crop dimensions
+    left = int(width * CROP_RATIOS[0])
+    right = width - int(width * CROP_RATIOS[1]) 
+    top = int(height * CROP_RATIOS[2])
+    bottom = height - int(height * CROP_RATIOS[3])
     crop_width = right - left
     crop_height = bottom - top
     
-    # 初始化视频写入器 (使用裁剪后的尺寸)
+    # Initialize video writer
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output_video_path, fourcc, fps, (crop_width, crop_height))
+    out = cv2.VideoWriter(OUTPUT_VIDEO, fourcc, fps, (crop_width, crop_height))
     
-    # 数据存储结构，保持 'row' 和 'col' 列名不变
+    # Data storage
     data = {
         'frameno': [],
-        'row': [], # 存储 layer_idx
-        'col': [], # 存储 angle_idx
-        'Ox': [],
-        'Oy': [],
-        'Cx': [],
-        'Cy': [],
+        'row': [],   # Layer index (0=center)
+        'col': [],   # Angular index
+        'Ox': [],    # Original X
+        'Oy': [],    # Original Y  
+        'Cx': [],    # Current X
+        'Cy': [],    # Current Y
         'major_axis': [],
         'minor_axis': [],
         'angle': []
     }
     
-    first_frame_markers_indexed = {} # 存储第一帧标记点，以 (layer_idx, angle_idx) 为键
-    frame_count = 0
+    first_frame_markers = {}  # Stores marker positions from first frame
     
+    # --------- Processing Loop ---------
+    frame_count = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         
-        cropped_frame = frame[top:bottom, left:right]
-        # 调用导入的 find_marker 和 marker_center
-        mask, area_mask = find_marker(cropped_frame)
-        markers = marker_center(mask, area_mask, cropped_frame)
+        # Crop frame
+        cropped = frame[top:bottom, left:right]
         
-        # 复制帧用于绘制结果
-        result_frame = cropped_frame.copy()
+        # Detect markers
+        mask, area_mask = find_marker(cropped)
+        markers = marker_center(mask, area_mask, cropped)
         
+        # Initialize visualization
+        vis_frame = cropped.copy()
+        
+        # First frame processing - establish marker identities
         if frame_count == 0:
-            # --- 新的圆环形排列身份建立逻辑 ---
             if not markers:
-                print("错误：第一帧未检测到任何标记点。请确保视频第一帧图像清晰。")
-                break
+                raise ValueError("No markers detected in first frame!")
             
-            marker_centers_xy = np.array([m['center'] for m in markers])
+            # Convert to numpy array for calculations
+            centers = np.array([m['center'] for m in markers])
             
-            # 1. 识别最中心的标记点
-            geometric_mean_center_x = np.mean(marker_centers_xy[:, 0])
-            geometric_mean_center_y = np.mean(marker_centers_xy[:, 1])
-            geometric_mean_center = np.array([geometric_mean_center_x, geometric_mean_center_y])
+            # Step 1: Identify center marker
+            mean_center = np.mean(centers, axis=0)
+            dist_to_mean = np.linalg.norm(centers - mean_center, axis=1)
+            center_idx = np.argmin(dist_to_mean)
+            center_pos = centers[center_idx]
             
-            distances_to_mean_center = np.linalg.norm(marker_centers_xy - geometric_mean_center, axis=1)
-            center_marker_idx_in_all = np.argmin(distances_to_mean_center)
-            
-            center_marker_data = markers[center_marker_idx_in_all]
-            actual_array_center = np.array(center_marker_data['center']) 
-            
-            remaining_markers = [m for i, m in enumerate(markers) if i != center_marker_idx_in_all]
-            
-            # 2. 处理中心标记点：分配 (0, 0) ID
-            first_frame_markers_indexed[(0, 0)] = { # layer_idx=0, angle_idx=0 代表中心点
-                'Ox': actual_array_center[0],
-                'Oy': actual_array_center[1],
-                'major_axis': center_marker_data['major_axis'],
-                'minor_axis': center_marker_data['minor_axis'],
-                'angle': center_marker_data['angle']
+            # Store center marker (layer 0, angle 0)
+            first_frame_markers[(0, 0)] = {
+                **markers[center_idx],
+                'Ox': center_pos[0],
+                'Oy': center_pos[1]
             }
             
-            if not remaining_markers:
-                # 如果只有中心点，则跳过后续分层，但确保中心点数据被记录
-                # (此处省略了中心点数据记录和绘图，因为它们会在后续的通用跟踪循环中处理)
-                pass
-            else:
-                # 3. 计算剩余标记点到实际中心点的极坐标 (半径和角度)
-                remaining_centers_xy = np.array([m['center'] for m in remaining_markers])
-                distances = np.linalg.norm(remaining_centers_xy - actual_array_center, axis=1)
+            # Process remaining markers
+            remaining = [m for i, m in enumerate(markers) if i != center_idx]
+            if remaining:
+                # Calculate polar coordinates relative to center
+                remaining_centers = np.array([m['center'] for m in remaining])
+                vectors = remaining_centers - center_pos
+                distances = np.linalg.norm(vectors, axis=1)
+                angles = np.arctan2(vectors[:,1], vectors[:,0])  # [-π, π]
                 
-                # np.arctan2(dy, dx) 返回 (-pi, pi] 范围内的角度
-                angles = np.arctan2(remaining_centers_xy[:, 1] - actual_array_center[1], 
-                                    remaining_centers_xy[:, 0] - actual_array_center[0]) 
+                # Cluster markers into layers by distance
+                kmeans = KMeans(n_clusters=NUM_OUTER_LAYERS, n_init=10)
+                kmeans.fit(distances.reshape(-1, 1))
                 
-                # 4. 使用 K-Means 聚类进行分层
-                num_outer_layers = 5 # 有5个外围层
+                # Sort layers by radius
+                layer_order = np.argsort(kmeans.cluster_centers_.flatten())
+                layer_map = {orig: new for new, orig in enumerate(layer_order)}
                 
-                distances_reshaped = distances.reshape(-1, 1)
-                kmeans = KMeans(n_clusters=num_outer_layers, random_state=0, n_init=10) 
-                kmeans.fit(distances_reshaped)
-                
-                # 确保 layer_idx 随着半径增大而增大
-                sorted_cluster_centers = np.sort(kmeans.cluster_centers_.flatten())
-                
-                layer_assignments = np.zeros(len(remaining_markers), dtype=int)
-                for i, dist_val in enumerate(distances):
-                    closest_center_idx = np.argmin(np.abs(dist_val - kmeans.cluster_centers_.flatten()))
-                    final_layer_idx = np.where(sorted_cluster_centers == kmeans.cluster_centers_.flatten()[closest_center_idx])[0][0]
-                    layer_assignments[i] = final_layer_idx + 1 # +1 是因为中心点是 layer 0
-
-                num_total_layers = num_outer_layers + 1 
-                
-                # 5. 在每个层内按角度排序，并分配唯一ID (实现循环移位)
-                layers_data = [[] for _ in range(num_total_layers)] 
-                for i, marker in enumerate(remaining_markers):
-                    layer_idx = layer_assignments[i]
-                    layers_data[layer_idx].append({
-                        'center': marker['center'],
-                        'major_axis': marker['major_axis'],
-                        'minor_axis': marker['minor_axis'],
-                        'angle': marker['angle'],
-                        'angle_rad': angles[i]
-                    })
-                
-                for layer_idx in range(1, num_total_layers): # 从 layer_idx=1 开始处理外围层
+                # Assign markers to layers
+                for i, m in enumerate(remaining):
+                    # Get original cluster assignment
+                    orig_layer = kmeans.labels_[i]
+                    # Get sorted layer index (1-based, since 0 is center)
+                    layer_idx = layer_map[orig_layer] + 1
                     
-                    current_layer_markers = layers_data[layer_idx]
-                    if not current_layer_markers:
-                        continue
-
-                    # a. 按角度排序 (从 -pi 到 pi)
-                    current_layer_markers.sort(key=lambda m: m['angle_rad'])
-
-                    # b. 找到最接近 0 角度的点 (即最右侧的点)
-                    min_angle_abs = np.inf
-                    start_idx = 0
-                    for i, marker_in_layer in enumerate(current_layer_markers):
-                        # 找到角度绝对值最小的，即最接近正X轴的点
-                        if abs(marker_in_layer['angle_rad']) < min_angle_abs:
-                            min_angle_abs = abs(marker_in_layer['angle_rad'])
-                            start_idx = i
-
-                    # c. 执行循环移位，使 start_idx 成为新的 angle_idx = 0
-                    shifted_list = current_layer_markers[start_idx:] + current_layer_markers[:start_idx]
-
-                    # d. 分配新的 angle_idx (逆时针方向)
-                    for angle_idx, marker_in_layer in enumerate(shifted_list):
-                        # 存储到 first_frame_markers_indexed
-                        first_frame_markers_indexed[(layer_idx, angle_idx)] = {
-                            'Ox': marker_in_layer['center'][0],
-                            'Oy': marker_in_layer['center'][1],
-                            'major_axis': marker_in_layer['major_axis'],
-                            'minor_axis': marker_in_layer['minor_axis'],
-                            'angle': marker_in_layer['angle']
-                        }
-            
-            # --- 结束身份建立逻辑 ---
-        
-        if first_frame_markers_indexed and markers:
-            # 建立当前帧标记点的查找表 (中心坐标 -> 完整数据)
-            current_markers_map = {tuple(m['center']): m for m in markers}
-            current_centers_list = np.array([m['center'] for m in markers]) 
-            
-            # 遍历第一帧的网格化标记点 (现在是按层和角度索引)
-            for (layer_idx, angle_idx), initial_marker_data in first_frame_markers_indexed.items():
-                Ox, Oy = initial_marker_data['Ox'], initial_marker_data['Oy']
+                    # Store angle with marker data
+                    m['angle_rad'] = angles[i]
+                    m['Ox'] = m['center'][0]
+                    m['Oy'] = m['center'][1]
+                    
+                    # Temporarily store with placeholder angle_idx
+                    first_frame_markers[(layer_idx, -1)] = m
                 
-                if len(current_centers_list) == 0: 
+                # For each layer, sort markers by angle and assign angle indices
+                for layer in range(1, NUM_OUTER_LAYERS + 1):
+                    # Get all markers in this layer
+                    layer_markers = [(k, v) for k, v in first_frame_markers.items() 
+                                   if k[0] == layer and k[1] == -1]
+                    
+                    if not layer_markers:
+                        continue
+                        
+                    # Sort by angle (CCW from positive x-axis)
+                    layer_markers.sort(key=lambda x: x[1]['angle_rad'])
+                    
+                    # Find index of marker closest to 0 angle
+                    start_idx = np.argmin([abs(m['angle_rad']) for _, m in layer_markers])
+                    
+                    # Assign angle indices (0 is at start_idx, increasing CCW)
+                    for i, ((_, _), m) in enumerate(layer_markers):
+                        angle_idx = (i - start_idx) % len(layer_markers)
+                        # Remove temp entry and create new with correct angle_idx
+                        del first_frame_markers[(layer, -1)]
+                        first_frame_markers[(layer, angle_idx)] = m
+        
+        # For all frames (including first), track markers
+        if first_frame_markers and markers:
+            # Create lookup of current marker positions
+            current_positions = {tuple(m['center']): m for m in markers}
+            current_centers = np.array([m['center'] for m in markers])
+            
+            # Match each reference marker to nearest current marker
+            for (layer, angle), ref_marker in first_frame_markers.items():
+                ref_pos = np.array([ref_marker['Ox'], ref_marker['Oy']])
+                
+                if len(current_centers) == 0:
                     continue
                 
-                # 寻找距离第一帧标记点最近的当前帧标记点
-                distances_to_current = cdist(np.array([[Ox, Oy]]), current_centers_list)
-                closest_idx = np.argmin(distances_to_current)
-                best_match_center_tuple = tuple(current_centers_list[closest_idx])
+                # Find closest current marker
+                distances = cdist([ref_pos], current_centers)[0]
+                closest_idx = np.argmin(distances)
+                closest_pos = tuple(current_centers[closest_idx])
                 
-                matched_data = current_markers_map.get(best_match_center_tuple)
+                # Verify minimum distance
+                if distances[closest_idx] > MIN_MARKER_DISTANCE:
+                    continue
                 
-                if matched_data:
-                    Cx, Cy = matched_data['center']
-                    major_axis = matched_data['major_axis']
-                    minor_axis = matched_data['minor_axis']
-                    angle = matched_data['angle']
-                    
-                    # 存储数据
+                current_marker = current_positions.get(closest_pos)
+                if current_marker:
+                    # Record data
                     data['frameno'].append(frame_count)
-                    data['row'].append(layer_idx) # 存储 layer_idx 到 'row'
-                    data['col'].append(angle_idx) # 存储 angle_idx 到 'col'
-                    data['Ox'].append(Ox)
-                    data['Oy'].append(Oy)
-                    data['Cx'].append(Cx)
-                    data['Cy'].append(Cy)
-                    data['major_axis'].append(major_axis)
-                    data['minor_axis'].append(minor_axis)
-                    data['angle'].append(angle)
-
-                    # 绘制部分
-                    cv2.circle(result_frame, (int(Cx), int(Cy)), 4, (0, 0, 255), -1)
-                    cv2.arrowedLine(result_frame, (int(Ox), int(Oy)), (int(Cx), int(Cy)), (0, 0, 255), 2, tipLength=0.25)
-
-                    # 绘制长短轴
-                    cv2.ellipse(result_frame, 
-                                ((int(Cx), int(Cy)), (int(major_axis), int(minor_axis)), angle),
-                                (0, 255, 0), 1)
+                    data['row'].append(layer)
+                    data['col'].append(angle)
+                    data['Ox'].append(ref_marker['Ox'])
+                    data['Oy'].append(ref_marker['Oy'])
+                    data['Cx'].append(current_marker['center'][0])
+                    data['Cy'].append(current_marker['center'][1])
+                    data['major_axis'].append(current_marker['major_axis'])
+                    data['minor_axis'].append(current_marker['minor_axis'])
+                    data['angle'].append(current_marker['angle'])
                     
-                    # 计算轴端点并绘制
-                    angle_rad = np.deg2rad(angle)
-                    major_p1 = (Cx - major_axis/2 * np.cos(angle_rad), Cy - major_axis/2 * np.sin(angle_rad))
-                    major_p2 = (Cx + major_axis/2 * np.cos(angle_rad), Cy + major_axis/2 * np.sin(angle_rad))
+                    # Draw visualization
+                    cx, cy = current_marker['center']
+                    ox, oy = ref_marker['Ox'], ref_marker['Oy']
                     
-                    minor_angle_rad = angle_rad + np.pi/2
-                    minor_p1 = (Cx - minor_axis/2 * np.cos(minor_angle_rad), Cy - minor_axis/2 * np.sin(minor_angle_rad))
-                    minor_p2 = (Cx + minor_axis/2 * np.cos(minor_angle_rad), Cy + minor_axis/2 * np.sin(minor_angle_rad))
+                    # Marker center
+                    cv2.circle(vis_frame, (int(cx), int(cy)), 4, MARKER_COLOR, -1)
                     
-                    cv2.line(result_frame, (int(major_p1[0]), int(major_p1[1])), (int(major_p2[0]), int(major_p2[1])), (0, 255, 255), 2)
-                    cv2.line(result_frame, (int(minor_p1[0]), int(minor_p1[1])), (int(minor_p2[0]), int(minor_p2[1])), (255, 0, 0), 2)
+                    # Displacement vector
+                    cv2.arrowedLine(vis_frame, (int(ox), int(oy)), (int(cx), int(cy)),
+                                   VECTOR_COLOR, 2, tipLength=0.25)
+                    
+                    # Draw major/minor axes
+                    angle_rad = np.deg2rad(current_marker['angle'])
+                    maj_len = current_marker['major_axis'] / 2
+                    min_len = current_marker['minor_axis'] / 2
+                    
+                    # Major axis (yellow)
+                    maj_p1 = (int(cx - maj_len * np.cos(angle_rad)),
+                             int(cy - maj_len * np.sin(angle_rad)))
+                    maj_p2 = (int(cx + maj_len * np.cos(angle_rad)),
+                             int(cy + maj_len * np.sin(angle_rad)))
+                    cv2.line(vis_frame, maj_p1, maj_p2, (0, 255, 255), 2)
+                    
+                    # Minor axis (blue)
+                    min_p1 = (int(cx - min_len * np.cos(angle_rad + np.pi/2)),
+                             int(cy - min_len * np.sin(angle_rad + np.pi/2)))
+                    min_p2 = (int(cx + min_len * np.cos(angle_rad + np.pi/2)),
+                             int(cy + min_len * np.sin(angle_rad + np.pi/2)))
+                    cv2.line(vis_frame, min_p1, min_p2, (255, 0, 0), 2)
         
-        # 写入处理后的帧
-        out.write(result_frame)
+        # Write frame
+        out.write(vis_frame)
         frame_count += 1
     
-    # 释放资源
+    # --------- Cleanup ---------
     cap.release()
     out.release()
     
-    # 保存CSV数据
-    df = pd.DataFrame(data)
-    df.to_csv(output_csv_path, index=False)
-    
-    print(f"处理完成！结果已保存到: {video_dir}")
+    # Save data
+    pd.DataFrame(data).to_csv(OUTPUT_CSV, index=False)
+    print(f"Processing complete. Results saved to {VIDEO_DIR}")
 
 if __name__ == '__main__':
     process_video()

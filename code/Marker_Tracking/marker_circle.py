@@ -1,423 +1,492 @@
 import cv2
 import numpy as np
-import setting
-#import matplotlib.pyplot as plt
+import pandas as pd 
+import os
 from scipy.ndimage.filters import maximum_filter, minimum_filter
 from scipy import ndimage
 from scipy.signal import fftconvolve
 import math
-import pandas as pd 
-import os 
+from sklearn.cluster import KMeans
+from scipy.spatial.distance import cdist
 
-def matching(N_, M_, fps_, x0_, y0_, dx_, dy_):
-
-    N = N_;
-    M = M_;
-    NM = N * M;
-
-    fps = fps_;
-
-    x_0 = x0_; y_0 = y0_; dx = dx_; dy = dy_;
-
-    Ox = np.zeros(NM)
-    Oy = np.zeros(NM)
-    for i in range(N):
-        for j in range(M):
-            Ox[i,j] = x_0 + j * dx;
-            Oy[i,j] = y_0 + i * dy;
-
-    flag_record = 1;
-
-    dmin = (dx * 0.5) * (dx * 0.5);
-    dmax = (dx * 1.8) * (dx * 1.8);
-    theta = 70;
-    moving_max = dx * 2;
-    flow_difference_threshold = dx * 0.8;
-    cost_threshold = 15000 * (dx / 21)* (dx / 21);
-
-
-def gkern(l=5, sig=1.):
-    """ creates gaussian kernel with side length l and a sigma of sig """
-    ax = np.linspace(-(l - 1) / 2., (l - 1) / 2., l)
-    xx, yy = np.meshgrid(ax, ax)
-    kernel = np.exp(-0.5 * (np.square(xx) + np.square(yy)) / np.square(sig))
-    return kernel / np.sum(kernel)
-
-def normxcorr2(template, image, mode="same"):
-    # If this happens, it is probably a mistake
-    if np.ndim(template) > np.ndim(image) or \
-            len([i for i in range(np.ndim(template)) if template.shape[i] > image.shape[i]]) > 0:
-        print("normxcorr2: TEMPLATE larger than IMG. Arguments may be swapped.")
-    template = template - np.mean(template)
-    image = image - np.mean(image)
-    a1 = np.ones(template.shape)
-    # Faster to flip up down and left right then use fftconvolve instead of scipy's correlate
-    ar = np.flipud(np.fliplr(template))
-    out = fftconvolve(image, ar.conj(), mode=mode)
-    image = fftconvolve(np.square(image), a1, mode=mode) - \
-            np.square(fftconvolve(image, a1, mode=mode)) / (np.prod(template.shape))
-    # Remove small machine precision errors after subtraction
-    image[np.where(image < 0)] = 0
-    template = np.sum(np.square(template))
-    out = out / np.sqrt(image * template)
-    # Remove any divisions by 0 or very close to 0
-    out[np.where(np.logical_not(np.isfinite(out)))] = 0
-    return out
-
-
-def init(frame):
-    RESCALE = setting.RESCALE
-    return cv2.resize(frame, (0, 0), fx=1.0/RESCALE, fy=1.0/RESCALE)
-
-
-def preprocessimg(img):
-    '''
-    Pre-processing image to remove noise
-    '''
-    dotspacepx = 36
-    ### speckle noise denoising
-    # dst = cv2.fastNlMeansDenoising(img_gray, None, 9, 15, 30)
-    ### adaptive histogram equalizer
-    # clahe = cv2.createCLAHE(clipLimit=15.0, tileGridSize=(10, 10))
-    # equalized = clahe.apply(img_gray)
-    ### Gaussian blur
-    # gsz = 2 * round(3 * mindiameterpx / 2) + 1
-    gsz = 2 * round(0.75 * dotspacepx / 2) + 1
-    blur = cv2.GaussianBlur(img, (51, 51), gsz / 6)
-    #### my linear varying filter
-    x = np.linspace(3, 1.5, img.shape[1])
-    y = np.linspace(3, 1.5, img.shape[0])
-    xx, yy = np.meshgrid(x, y)
-    mult = blur * yy
-    ### adjust contrast
-    res = cv2.convertScaleAbs(blur, alpha=2, beta=0)
-    return res
-
-# 这个函数用来为矫正畸变的marker识别
-# def find_marker(frame):
-#     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-#     im_blur_3 = cv2.GaussianBlur(gray, (39, 39), 8)
-#     im_blur_8 = cv2.GaussianBlur(gray, (101, 101), 20)
-#     im_blur_sub = im_blur_8 - im_blur_3 + 10
+class MarkerTracker:
+    """A comprehensive marker tracking system for video analysis with distortion correction"""
     
-#     # 这是能反映真实面积的mask
-#     area_mask = cv2.inRange(im_blur_sub, 30, 200)
-
-#     # --- 后续步骤用于精确定位中心点 --- 
-#     template = gkern(l=80, sig=13)
-#     # 注意：模板匹配应该在 area_mask 上进行
-#     nrmcrimg = normxcorr2(template, area_mask) 
-    
-#     a = nrmcrimg
-#     # 这是用于精确定位质心的mask
-#     mask = (a > 0.1).astype('uint8')
-
-#     # 返回两个mask
-#     return mask, area_mask 
-
-def find_marker(frame):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    # 640*480情况
-    im_blur_3 = cv2.GaussianBlur(gray, (21, 21), 4.56)
-    im_blur_8 = cv2.GaussianBlur(gray, (35, 35), 11.4)
-    im_blur_sub = im_blur_8 - im_blur_3 + 15
-    # 这是能反映真实面积的mask
-    area_mask = cv2.inRange(im_blur_sub, 35, 180)
-    # --- 后续步骤用于精确定位中心点 --- 
-    template = gkern(l=33, sig=7.4)
-    
-    # # 1280*1024情况
-    # im_blur_3 = cv2.GaussianBlur(gray, (39, 39), 8)
-    # im_blur_8 = cv2.GaussianBlur(gray, (101, 101), 20)
-    # im_blur_sub = im_blur_8 - im_blur_3 + 15
-    # # 这是能反映真实面积的mask
-    # area_mask = cv2.inRange(im_blur_sub, 20, 200)
-    # # --- 后续步骤用于精确定位中心点 --- 
-    # template = gkern(l=80, sig=13)
-    
-    
-    # 注意：模板匹配应该在 area_mask 上进行
-    nrmcrimg = normxcorr2(template, area_mask) 
-    
-    a = nrmcrimg
-    # 这是用于精确定位质心的mask
-    mask = (a > 0.1).astype('uint8')
-
-    # 返回两个mask
-    return mask, area_mask 
-
-def marker_center(mask, area_mask, frame):
-    """
-    修改后的函数，添加距离阈值约束（匹配距离 < 椭圆半短轴的1/5），提升质心与椭圆的匹配准确性
-    """
-    img3 = mask.astype(np.uint8)
-    # 640*480情况
-    neighborhood_size = 8
-    threshold = 0
-    
-    # 1280*1024情况（根据实际需求注释切换）
-    # neighborhood_size = 14
-    # threshold = 0
-    
-    # 提取局部最大值作为潜在质心（优化噪点过滤）
-    data_max = maximum_filter(img3, neighborhood_size)
-    maxima = (img3 == data_max)
-    data_min = minimum_filter(img3, neighborhood_size)
-    diff = ((data_max - data_min) > threshold)
-    maxima[diff == 0] = 0
-    
-    labeled, num_objects = ndimage.label(maxima)
-    if num_objects == 0:
-        return []
-    
-    # 计算质心（保持浮点精度）
-    marker_centers_yx = np.array(ndimage.center_of_mass(img3, labeled, range(1, num_objects + 1)))
-    if marker_centers_yx.ndim == 1 and num_objects == 1:
-        marker_centers_yx = marker_centers_yx.reshape(1, -1)
-    if marker_centers_yx.size == 0:
-        return []
-    
-    # 轮廓提取（优化轮廓质量）
-    if np.max(area_mask) > 1:
-        area_mask_8u = area_mask.astype(np.uint8)
-    else:
-        area_mask_8u = (area_mask * 255).astype(np.uint8)
-    
-    # 对轮廓进行开运算，去除小噪点和毛刺
-    kernel = np.ones((5, 5), np.uint8)
-    area_mask_8u = cv2.morphologyEx(area_mask_8u, cv2.MORPH_OPEN, kernel)
-    contours, _ = cv2.findContours(area_mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    output_data = []
-    
-    # 质心转换为 (x, y) 格式
-    centers_xy_list = [(c[1], c[0]) for c in marker_centers_yx] 
-    unmatched_centers_with_idx = list(enumerate(centers_xy_list))  # 保留未匹配质心的索引和坐标
-
-    # 基于距离阈值的匹配逻辑
-    for contour in contours:
-        # 过滤点数不足的轮廓（避免椭圆拟合失败）
-        if len(contour) < 5:
-            continue
-            
-        # 拟合椭圆并确定长短轴
-        ellipse = cv2.fitEllipse(contour)
-        (ellipse_cx, ellipse_cy), (width, height), angle_raw = ellipse
+    def __init__(self, config):
+        """
+        Initialize tracker with configuration parameters
         
-        # 明确长短轴（短轴用于计算阈值）
-        if width > height:
-            major_axis = width
-            minor_axis = height
-            angle = angle_raw
+        Args:
+            config (dict): Configuration dictionary containing:
+                - video_path: Path to input video
+                - output_dir: Directory for saving results
+                - crop_ratios: (left, right, top, bottom) crop ratios
+                - marker_params: Parameters for marker detection
+                - tracking_params: Parameters for marker tracking
+        """
+        self.config = config
+        self._validate_config()
+        self._setup_paths()
+        self.frame_count = 0
+        self.first_frame_markers = {}
+        
+    def _validate_config(self):
+        """Validate configuration parameters"""
+        required_keys = ['video_path', 'output_dir', 'crop_ratios']
+        for key in required_keys:
+            if key not in self.config:
+                raise ValueError(f"Missing required config key: {key}")
+                
+        if not os.path.exists(self.config['video_path']):
+            raise FileNotFoundError(f"Video file not found: {self.config['video_path']}")
+            
+    def _setup_paths(self):
+        """Set up output paths and directories"""
+        os.makedirs(self.config['output_dir'], exist_ok=True)
+        video_name = os.path.splitext(os.path.basename(self.config['video_path']))[0]
+        self.output_csv = os.path.join(self.config['output_dir'], f'{video_name}_markers.csv')
+        self.output_video = os.path.join(self.config['output_dir'], f'{video_name}_tracked.avi')
+        
+    def _init_video(self):
+        """Initialize video capture and writer"""
+        self.cap = cv2.VideoCapture(self.config['video_path'])
+        if not self.cap.isOpened():
+            raise IOError(f"Could not open video: {self.config['video_path']}")
+            
+        # Get video properties
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        # Calculate crop dimensions
+        left = int(self.width * self.config['crop_ratios'][0])
+        right = self.width - int(self.width * self.config['crop_ratios'][1])
+        top = int(self.height * self.config['crop_ratios'][2])
+        bottom = self.height - int(self.height * self.config['crop_ratios'][3])
+        self.crop_width = right - left
+        self.crop_height = bottom - top
+        
+        # Initialize video writer
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        self.writer = cv2.VideoWriter(
+            self.output_video, 
+            fourcc, 
+            self.fps, 
+            (self.crop_width, self.crop_height)
+        )
+        
+    def _preprocess_frame(self, frame):
+        """Preprocess frame with cropping and optional undistortion"""
+        # Crop frame
+        left = int(self.width * self.config['crop_ratios'][0])
+        right = self.width - int(self.width * self.config['crop_ratios'][1])
+        top = int(self.height * self.config['crop_ratios'][2])
+        bottom = self.height - int(self.height * self.config['crop_ratios'][3])
+        cropped = frame[top:bottom, left:right]
+        
+        # Apply distortion correction if configured
+        if 'calibration_params' in self.config:
+            cropped = self._undistort_frame(cropped)
+            
+        return cropped
+        
+    def _undistort_frame(self, frame):
+        """Apply camera calibration to undistort frame"""
+        # Extract calibration parameters
+        K = np.array(self.config['calibration_params']['camera_matrix'])
+        D = np.array(self.config['calibration_params']['dist_coeffs'])
+        
+        # Get optimal new camera matrix
+        h, w = frame.shape[:2]
+        new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
+            K, D, (w,h), 0, (w,h)
+        )
+        
+        # Undistort
+        map1, map2 = cv2.initUndistortRectifyMap(
+            K, D, None, new_camera_matrix, (w,h), cv2.CV_16SC2
+        )
+        return cv2.remap(frame, map1, map2, cv2.INTER_LINEAR)
+        
+    @staticmethod
+    def _find_markers(frame):
+        """Detect circular markers in a frame using template matching"""
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Adaptive blurring based on image size
+        if gray.shape[0] <= 480:  # Smaller resolution
+            im_blur_3 = cv2.GaussianBlur(gray, (21, 21), 4.56)
+            im_blur_8 = cv2.GaussianBlur(gray, (35, 35), 11.4)
+            template = MarkerTracker._gkern(l=33, sig=7.4)
+            thresh = 35
+        else:  # Larger resolution
+            im_blur_3 = cv2.GaussianBlur(gray, (39, 39), 8)
+            im_blur_8 = cv2.GaussianBlur(gray, (101, 101), 20)
+            template = MarkerTracker._gkern(l=80, sig=13)
+            thresh = 20
+            
+        im_blur_sub = im_blur_8 - im_blur_3 + 15
+        area_mask = cv2.inRange(im_blur_sub, thresh, 180 if gray.shape[0] <= 480 else 200)
+        
+        # Template matching for precise localization
+        nrmcrimg = MarkerTracker._normxcorr2(template, area_mask) 
+        mask = (nrmcrimg > 0.1).astype('uint8')
+        
+        return mask, area_mask
+        
+    @staticmethod
+    def _gkern(l=5, sig=1.):
+        """Create Gaussian kernel for template matching"""
+        ax = np.linspace(-(l - 1)/2., (l - 1)/2., l)
+        xx, yy = np.meshgrid(ax, ax)
+        kernel = np.exp(-0.5*(np.square(xx) + np.square(yy))/np.square(sig))
+        return kernel/np.sum(kernel)
+        
+    @staticmethod
+    def _normxcorr2(template, image, mode="same"):
+        """Normalized cross-correlation for template matching"""
+        if (np.ndim(template) > np.ndim(image) or 
+            any(t > i for t, i in zip(template.shape, image.shape))):
+            print("Warning: Template larger than image. Arguments may be swapped.")
+            
+        template = template - np.mean(template)
+        image = image - np.mean(image)
+        
+        ar = np.flipud(np.fliplr(template))
+        out = fftconvolve(image, ar.conj(), mode=mode)
+        
+        image_sq = fftconvolve(np.square(image), np.ones(template.shape), mode=mode)
+        image_sq -= np.square(fftconvolve(image, np.ones(template.shape), mode=mode))/np.prod(template.shape)
+        image_sq[image_sq < 0] = 0
+        
+        out = out/np.sqrt(image_sq * np.sum(np.square(template)))
+        out[np.logical_not(np.isfinite(out))] = 0
+        return out
+        
+    @staticmethod
+    def _marker_center(mask, area_mask, frame=None):
+        """Locate marker centers and fit ellipses with quality checks"""
+        # Find local maxima as potential centers
+        neighborhood_size = 8 if mask.shape[0] <= 480 else 14
+        data_max = maximum_filter(mask, neighborhood_size)
+        maxima = (mask == data_max)
+        diff = ((data_max - minimum_filter(mask, neighborhood_size)) > 0)
+        maxima[diff == 0] = 0
+        
+        labeled, num_objects = ndimage.label(maxima)
+        if num_objects == 0:
+            return []
+            
+        # Calculate centroids
+        centers = np.array(ndimage.center_of_mass(mask, labeled, range(1, num_objects+1)))
+        if centers.ndim == 1 and num_objects == 1:
+            centers = centers.reshape(1, -1)
+        if centers.size == 0:
+            return []
+            
+        # Prepare contour detection
+        if np.max(area_mask) > 1:
+            area_mask_8u = area_mask.astype(np.uint8)
         else:
-            major_axis = height
-            minor_axis = width
-            angle = angle_raw + 90
-        
-        # 过滤异常短轴（避免除以零或过小值）
-        if minor_axis < 5:  # 假设最小短轴不小于5像素（可根据实际调整）
-            continue
-        
-        # 计算距离阈值：必须小于椭圆半短轴的1/5（半短轴 = minor_axis/2，1/5即 minor_axis/(2*5) = minor_axis/10）
-        distance_threshold = minor_axis / 10  # 允许的最大距离
-        distance_threshold_sq = distance_threshold **2  # 平方形式，避免开方运算
-        
-        # 寻找轮廓内符合距离阈值的最佳质心
-        best_match_idx_in_unmatched = -1
-        min_distance_sq = float('inf')
-        
-        for i, (original_idx, center_xy) in enumerate(unmatched_centers_with_idx):
-            cx, cy = center_xy
+            area_mask_8u = (area_mask * 255).astype(np.uint8)
             
-            # 条件1：质心必须在轮廓内
-            if cv2.pointPolygonTest(contour, center_xy, False) >= 0:
-                # 条件2：距离椭圆中心的距离必须小于阈值
-                distance_sq = (cx - ellipse_cx)** 2 + (cy - ellipse_cy) **2
-                
-                if distance_sq < distance_threshold_sq and distance_sq < min_distance_sq:
-                    min_distance_sq = distance_sq
-                    best_match_idx_in_unmatched = i
+        # Clean contours with morphology
+        kernel = np.ones((5,5), np.uint8)
+        area_mask_8u = cv2.morphologyEx(area_mask_8u, cv2.MORPH_OPEN, kernel)
+        contours, _ = cv2.findContours(area_mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # 只有符合阈值的匹配才被接受
-        if best_match_idx_in_unmatched != -1:
-            # 移除匹配的质心，避免重复匹配
-            original_idx, matched_center_xy = unmatched_centers_with_idx.pop(best_match_idx_in_unmatched)
-            Cx, Cy = matched_center_xy
+        output = []
+        centers_xy = [(c[1], c[0]) for c in centers] 
+        unmatched = list(enumerate(centers_xy))
+        
+        # Match contours to centers with quality checks
+        for contour in contours:
+            if len(contour) < 5:
+                continue
+                
+            # Fit ellipse
+            ellipse = cv2.fitEllipse(contour)
+            (cx, cy), (w, h), angle = ellipse
             
-            output_data.append({
-                'center': matched_center_xy, 
-                'major_axis': float(major_axis),
-                'minor_axis': float(minor_axis),
-                'angle': float(angle)
-            })
+            # Determine major/minor axes
+            if w > h:
+                major, minor = w, h
+                ellipse_angle = angle
+            else:
+                major, minor = h, w
+                ellipse_angle = angle + 90
+                
+            if minor < 5:  # Minimum size threshold
+                continue
+                
+            # Find best matching center within contour
+            best_idx = -1
+            min_dist = float('inf')
+            threshold = (minor/10)**2  # Distance threshold squared
             
-            # 可视化（保持原逻辑）
-            if frame is not None:
-                cv2.ellipse(frame, ellipse, (0, 255, 0), 2)
+            for i, (orig_idx, (x, y)) in enumerate(unmatched):
+                if cv2.pointPolygonTest(contour, (x,y), False) < 0:
+                    continue
+                    
+                dist = (x-cx)**2 + (y-cy)**2
+                if dist < threshold and dist < min_dist:
+                    min_dist = dist
+                    best_idx = i
+                    
+            if best_idx != -1:
+                orig_idx, (x,y) = unmatched.pop(best_idx)
+                output.append({
+                    'center': (x,y),
+                    'major_axis': float(major),
+                    'minor_axis': float(minor),
+                    'angle': float(ellipse_angle)
+                })
                 
-                angle_rad = math.radians(angle)
-                major_p1 = (Cx - major_axis/2 * math.cos(angle_rad), 
-                           Cy - major_axis/2 * math.sin(angle_rad))
-                major_p2 = (Cx + major_axis/2 * math.cos(angle_rad), 
-                           Cy + major_axis/2 * math.sin(angle_rad))
+                # Visualization if frame provided
+                if frame is not None:
+                    MarkerTracker._draw_marker(frame, (x,y), ellipse, major, minor, ellipse_angle)
+                    
+        return output
+        
+    @staticmethod
+    def _draw_marker(frame, center, ellipse, major, minor, angle):
+        """Visualize marker with ellipse and axes"""
+        cv2.ellipse(frame, ellipse, (0,255,0), 2)
+        
+        angle_rad = math.radians(angle)
+        cx, cy = center
+        
+        # Draw major axis (yellow)
+        maj_p1 = (cx - major/2 * math.cos(angle_rad), 
+                 cy - major/2 * math.sin(angle_rad))
+        maj_p2 = (cx + major/2 * math.cos(angle_rad), 
+                 cy + major/2 * math.sin(angle_rad))
+        cv2.line(frame, (int(maj_p1[0]), int(maj_p1[1])),
+                (int(maj_p2[0]), int(maj_p2[1])), (0,255,255), 2)
                 
-                minor_angle_rad = angle_rad + math.pi/2
-                minor_p1 = (Cx - minor_axis/2 * math.cos(minor_angle_rad), 
-                           Cy - minor_axis/2 * math.sin(minor_angle_rad))
-                minor_p2 = (Cx + minor_axis/2 * math.cos(minor_angle_rad), 
-                           Cy + minor_axis/2 * math.sin(minor_angle_rad))
+        # Draw minor axis (blue)
+        min_p1 = (cx - minor/2 * math.cos(angle_rad + math.pi/2),
+                 cy - minor/2 * math.sin(angle_rad + math.pi/2))
+        min_p2 = (cx + minor/2 * math.cos(angle_rad + math.pi/2),
+                 cy + minor/2 * math.sin(angle_rad + math.pi/2))
+        cv2.line(frame, (int(min_p1[0]), int(min_p1[1])),
+                (int(min_p2[0]), int(min_p2[1])), (255,0,0), 2)
                 
-                cv2.line(frame, (int(major_p1[0]), int(major_p1[1])),
-                        (int(major_p2[0]), int(major_p2[1])), (0, 255, 255), 2)
-                cv2.line(frame, (int(minor_p1[0]), int(minor_p1[1])),
-                        (int(minor_p2[0]), int(minor_p2[1])), (255, 0, 0), 2)
-    
-    return output_data
+    def _process_first_frame(self, markers):
+        """Establish marker identities in first frame"""
+        if not markers:
+            raise ValueError("No markers detected in first frame!")
+            
+        centers = np.array([m['center'] for m in markers])
+        
+        # 1. Find center marker
+        center_pos = np.mean(centers, axis=0)
+        dists = np.linalg.norm(centers - center_pos, axis=1)
+        center_idx = np.argmin(dists)
+        center_marker = markers[center_idx]
+        
+        # Store center (layer 0, angle 0)
+        self.first_frame_markers[(0,0)] = {
+            **center_marker,
+            'Ox': center_marker['center'][0],
+            'Oy': center_marker['center'][1]
+        }
+        
+        # 2. Process remaining markers in concentric rings
+        remaining = [m for i,m in enumerate(markers) if i != center_idx]
+        if not remaining:
+            return
+            
+        remaining_centers = np.array([m['center'] for m in remaining])
+        vectors = remaining_centers - center_marker['center']
+        
+        # Polar coordinates
+        distances = np.linalg.norm(vectors, axis=1)
+        angles = np.arctan2(vectors[:,1], vectors[:,0])  # [-π, π]
+        
+        # Cluster into layers by distance
+        kmeans = KMeans(n_clusters=self.config.get('num_layers', 5), n_init=10)
+        kmeans.fit(distances.reshape(-1,1))
+        
+        # Sort layers by radius
+        layer_order = np.argsort(kmeans.cluster_centers_.flatten())
+        layer_map = {orig: new+1 for new, orig in enumerate(layer_order)}  # Layer 0 is center
+        
+        # Assign markers to layers and angles
+        for i, m in enumerate(remaining):
+            layer = layer_map[kmeans.labels_[i]]
+            angle_idx = -1  # Temporary placeholder
+            
+            # Store with polar info
+            self.first_frame_markers[(layer, angle_idx)] = {
+                **m,
+                'angle_rad': angles[i],
+                'Ox': m['center'][0],
+                'Oy': m['center'][1]
+            }
+            
+        # Sort markers in each layer by angle and assign angle indices
+        for layer in range(1, self.config.get('num_layers',5)+1):
+            layer_markers = [(k,v) for k,v in self.first_frame_markers.items() 
+                           if k[0] == layer and k[1] == -1]
+                           
+            if not layer_markers:
+                continue
+                
+            # Sort by angle (CCW from positive x-axis)
+            layer_markers.sort(key=lambda x: x[1]['angle_rad'])
+            
+            # Find index of marker closest to 0 angle
+            start_idx = np.argmin([abs(m['angle_rad']) for _,m in layer_markers])
+            
+            # Assign angle indices (0 at start_idx, increasing CCW)
+            for i, ((_,_), m) in enumerate(layer_markers):
+                angle_idx = (i - start_idx) % len(layer_markers)
+                # Update with correct angle index
+                del self.first_frame_markers[(layer, -1)]
+                self.first_frame_markers[(layer, angle_idx)] = m
+                
+    def _track_markers(self, frame, markers):
+        """Track markers relative to first frame positions"""
+        if not self.first_frame_markers or not markers:
+            return []
+            
+        # Current marker positions
+        current_positions = {tuple(m['center']): m for m in markers}
+        current_centers = np.array([m['center'] for m in markers])
+        
+        tracked_data = []
+        min_dist = self.config.get('min_marker_distance', 20)
+        
+        # Match each reference marker to nearest current marker
+        for (layer, angle), ref in self.first_frame_markers.items():
+            ref_pos = np.array([ref['Ox'], ref['Oy']])
+            
+            if len(current_centers) == 0:
+                continue
+                
+            # Find closest current marker
+            dists = cdist([ref_pos], current_centers)[0]
+            closest_idx = np.argmin(dists)
+            
+            if dists[closest_idx] > min_dist:
+                continue
+                
+            closest_pos = tuple(current_centers[closest_idx])
+            curr = current_positions.get(closest_pos)
+            
+            if curr:
+                # Record tracking data
+                tracked_data.append({
+                    'frameno': self.frame_count,
+                    'row': layer,
+                    'col': angle,
+                    'Ox': ref['Ox'],
+                    'Oy': ref['Oy'],
+                    'Cx': curr['center'][0],
+                    'Cy': curr['center'][1],
+                    'major_axis': curr['major_axis'],
+                    'minor_axis': curr['minor_axis'],
+                    'angle': curr['angle']
+                })
+                
+                # Draw tracking visualization
+                self._draw_tracking(frame, ref, curr)
+                
+        return tracked_data
+        
+    def _draw_tracking(self, frame, ref, curr):
+        """Draw marker tracking visualization"""
+        cx, cy = curr['center']
+        ox, oy = ref['Ox'], ref['Oy']
+        
+        # Marker center
+        cv2.circle(frame, (int(cx), int(cy)), 4, (0,0,255), -1)
+        
+        # Displacement vector
+        cv2.arrowedLine(frame, (int(ox), int(oy)), (int(cx), int(cy)),
+                       (0,0,255), 2, tipLength=0.25)
+        
+        # Major/minor axes
+        angle_rad = np.deg2rad(curr['angle'])
+        maj_len = curr['major_axis'] / 2
+        min_len = curr['minor_axis'] / 2
+        
+        # Major axis (yellow)
+        maj_p1 = (int(cx - maj_len * np.cos(angle_rad)),
+                 int(cy - maj_len * np.sin(angle_rad)))
+        maj_p2 = (int(cx + maj_len * np.cos(angle_rad)),
+                 int(cy + maj_len * np.sin(angle_rad)))
+        cv2.line(frame, maj_p1, maj_p2, (0,255,255), 2)
+        
+        # Minor axis (blue)
+        min_p1 = (int(cx - min_len * np.cos(angle_rad + np.pi/2)),
+                 int(cy - min_len * np.sin(angle_rad + np.pi/2)))
+        min_p2 = (int(cx + min_len * np.cos(angle_rad + np.pi/2)),
+                 int(cy + min_len * np.sin(angle_rad + np.pi/2)))
+        cv2.line(frame, min_p1, min_p2, (255,0,0), 2)
+        
+    def process(self):
+        """Main processing loop for video tracking"""
+        self._init_video()
+        data = []
+        
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+                
+            # Preprocess and detect markers
+            cropped = self._preprocess_frame(frame)
+            mask, area_mask = self._find_markers(cropped)
+            markers = self._marker_center(mask, area_mask, cropped.copy())
+            
+            # First frame processing
+            if self.frame_count == 0:
+                self._process_first_frame(markers)
+                
+            # Track markers and collect data
+            frame_data = self._track_markers(cropped, markers)
+            data.extend(frame_data)
+            
+            # Write frame to output video
+            self.writer.write(cropped)
+            self.frame_count += 1
+            
+            # Progress feedback
+            if self.frame_count % 100 == 0:
+                print(f"Processed frame {self.frame_count}")
+                
+        # Save results
+        self._save_results(data)
+        self._cleanup()
+        
+    def _save_results(self, data):
+        """Save tracking data to CSV"""
+        df = pd.DataFrame(data)
+        df.to_csv(self.output_csv, index=False)
+        print(f"Saved tracking data to {self.output_csv}")
+        
+    def _cleanup(self):
+        """Release resources"""
+        self.cap.release()
+        self.writer.release()
+        cv2.destroyAllWindows()
 
-
-def draw_flow(frame, flow):
-    Ox, Oy, Cx, Cy, Occupied = flow
-
-    dx = np.mean(np.abs(np.asarray(Ox) - np.asarray(Cx)))
-    dy = np.mean(np.abs(np.asarray(Oy) - np.asarray(Cy)))
-    dnet = np.sqrt(dx**2 + dy**2)
-    print (dnet * 0.075, '\n')
-
-
-    K = 1
-    for i in range(len(Ox)):
-        for j in range(len(Ox[i])):
-            pt1 = (int(Ox[i][j]), int(Oy[i][j]))
-            pt2 = (int(Cx[i][j] + K * (Cx[i][j] - Ox[i][j])), int(Cy[i][j] + K * (Cy[i][j] - Oy[i][j])))
-            color = (0, 0, 255)
-            if Occupied[i][j] <= -1:
-                color = (127, 127, 255)
-            cv2.arrowedLine(frame, pt1, pt2, color, 2,  tipLength=0.25)
-
-
-def warp_perspective(img): # 透视变换
-
-    TOPLEFT = (175,230)
-    TOPRIGHT = (380,225)
-    BOTTOMLEFT = (10,410)
-    BOTTOMRIGHT = (530,400)
-
-    WARP_W = 215
-    WARP_H = 215
-
-    points1=np.float32([TOPLEFT,TOPRIGHT,BOTTOMLEFT,BOTTOMRIGHT])
-    points2=np.float32([[0,0],[WARP_W,0],[0,WARP_H],[WARP_W,WARP_H]])
-
-    matrix=cv2.getPerspectiveTransform(points1,points2)
-
-    result = cv2.warpPerspective(img, matrix, (WARP_W,WARP_H))
-
-    return result
-
-
-
-def save_new_intrinsics_to_excel(new_camera_matrix, filepath): # 保存新内参矩阵到Excel文件
-    """
-    将计算出的新相机内参矩阵保存到指定的Excel文件。
-
-    Args:
-        new_camera_matrix (np.ndarray): 3x3 的新内参矩阵。
-        filepath (str): 输出的Excel文件路径。
-    """
-    # 确保输出目录存在
-    output_dir = os.path.dirname(filepath)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"Created directory: {output_dir}")
-
-    # 从矩阵中提取参数
-    new_fx = new_camera_matrix[0, 0]
-    new_fy = new_camera_matrix[1, 1]
-    new_cx = new_camera_matrix[0, 2]
-    new_cy = new_camera_matrix[1, 2]
-
-    # 准备要写入的数据
-    data = {
-        'Parameter': ['new_fx', 'new_fy', 'new_cx', 'new_cy'],
-        'Value': [new_fx, new_fy, new_cx, new_cy],
-        'Description': [
-            'Focal length in x-axis for undistorted image (pixels)',
-            'Focal length in y-axis for undistorted image (pixels)',
-            'Principal point x-coordinate for undistorted image (pixels)',
-            'Principal point y-coordinate for undistorted image (pixels)'
-        ]
+# Example usage
+if __name__ == "__main__":
+    config = {
+        'video_path': './video/test2.avi',
+        'output_dir': './results',
+        'crop_ratios': (1/8, 1/8, 1/16, 0),  # left, right, top, bottom
+        'num_layers': 5,  # Number of concentric marker circles
+        'min_marker_distance': 20,  # Minimum distance between markers (pixels)
+        # Optional camera calibration parameters:
+        # 'calibration_params': {
+        #     'camera_matrix': [[fx, 0, cx], [0, fy, cy], [0, 0, 1]],
+        #     'dist_coeffs': [k1, k2, p1, p2, k3]
+        # }
     }
-
-    # 创建DataFrame并保存
-    df = pd.DataFrame(data)
-    try:
-        df.to_excel(filepath, index=False, engine='openpyxl')
-        print(f"\nSuccessfully saved new intrinsic parameters to: '{filepath}'")
-    except Exception as e:
-        print(f"\nERROR: Failed to save new intrinsic parameters to Excel. Reason: {e}")
-
-
-def init_HSR(img):
-    # 1. 定义目标分辨率
-    TARGET_WIDTH = 1280
-    TARGET_HEIGHT = 1024
-    TARGET_DIM = (TARGET_WIDTH, TARGET_HEIGHT)
     
-    # 2. 【已修改】检查输入图像的尺寸
-    h_input, w_input = img.shape[:2]
-    if (w_input, h_input) != TARGET_DIM:
-        # 如果尺寸不匹配，则引发一个错误，而不是进行缩放
-        raise ValueError(f"输入图像尺寸 ({w_input}, {h_input}) 与预期的标定尺寸 {TARGET_DIM} 不匹配。请提供正确分辨率的图像。")
-    
-    # 如果尺寸匹配，程序将继续执行
-    # 从这里开始，img_resized 变量可以被 img 替代，因为我们已经确保了尺寸正确
-    
-    # 3. 加载标定参数
-    # 相机内参矩阵 K (针对 1280x1024 分辨率)
-    '''
-            camera_matrix = np.array([
-            [params['fx'], skew,         params['cx']],
-            [0,            params['fy'], params['cy']],
-            [0,            0,            1]
-        ], dtype=np.float32)
-
-        # 构建畸变系数数组 D
-        dist_keys = ['k1', 'k2', 'p1', 'p2', 'k3', 'k4', 'k5', 'k6']
-    '''
-
-    # 相机内参矩阵 K (使用OpenCV标准格式)
-    K_calibrated = np.array([
-        [1793.502947,    0.0,         627.7660117],
-        [   0.0,      1852.128659,   418.7903304],
-        [   0.0,         0.0,           1.0      ]
-    ], dtype=np.float32)
-
-# 畸变系数 D = [k1, k2, p1, p2, k3]
-    D_calibrated = np.array([-0.339501755, 0.27796056, -0.006545208, -0.034617897, 0.875068688], dtype=np.float32)
-
-    # 4. 计算优化的相机矩阵 (与之前相同)
-    img_size = TARGET_DIM
-    alpha = 0
-    new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(K_calibrated, D_calibrated, img_size, alpha, img_size)
-
-    # 5. 计算映射表 (与之前相同)
-    map1, map2 = cv2.initUndistortRectifyMap(
-        K_calibrated,
-        D_calibrated,
-        None,
-        new_camera_matrix,
-        img_size,
-        cv2.CV_16SC2
-    )
-
-    # 6. 应用映射表进行重映射 (与之前相同)
-    # 注意：这里直接使用 img，因为我们已经确认了它的尺寸是正确的
-    undistorted_img = cv2.remap(
-        img,
-        map1,
-        map2,
-        interpolation=cv2.INTER_LINEAR
-    )
-    
-    return undistorted_img, new_camera_matrix
-
+    tracker = MarkerTracker(config)
+    tracker.process()
