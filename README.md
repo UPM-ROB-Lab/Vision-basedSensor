@@ -1,6 +1,6 @@
 # A Novel Bonnet Polishing Approach with a Vision-Based Sensor for In-Situ Characterization of Contact Force and Pose Misalignment
 
-Created by Feiyu Zhang, Jieji Ren, Yufeng Yuan, Mengqi Rao, S.K. Ong, Yuehong Yin
+Created by Feiyu Zhang, Jieji Ren, Yufeng Yuan, Mengqi Rao, Yuehong Yin
 
 ## Introduction
 
