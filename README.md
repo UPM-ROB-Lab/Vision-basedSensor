@@ -8,28 +8,26 @@ This work is based on our CIRP 2026 paper titled _**A Novel Bonnet Polishing App
 
 ## 1. Hardware System Prototype
 
-To validate the in-situ characterization methodology proposed in the paper, a vision-based sensor prototype was developed and integrated into a self-developed 5-axis robot arm.
+To validate the in-situ characterization methodology proposed in the paper, a vision-based sensor was developed and integrated into a self-developed 5-axis robot arm.
 
 <div align="center">
   <img src="./img/hardware_overview.png" alt="Overall Hardware System Architecture" width="800"/>
   <br />
-  <b>Figure 1: Overall Hardware System Architecture and Data Flow.</b>
+  <b>Figure 1: Overall Hardware System Architecture.</b>
 </div>
-
-The following figure provides a detailed view of the physical implementation of the vision-based sensor integrated with the bonnet tool and the 5-axis robot arm.
 
 <div align="center">
   <img src="./img/hardware_prototype.png" alt="Hardware System Overview" width="800"/>
   <br />
-  <b>Figure 2: Physical Implementation Details of the Vision-Based Sensor and Bonnet Tool.</b>
+  <b>Figure 2: Physical Implementation Details.</b>
 </div>
 
 ## 2. Algorithm Verification
 
-The data processing pipeline transforms raw visual signals into quantitative contact state information through four sequential stages. Below, we detail the implementation and validation results for each stage.
+The proposed approach converts raw visual signals into quantitative contact state information via four sequential stages. Below, we detail the implementation and validation results for each stage.
 
 ### A. 2D Feature Extraction (Sub-pixel Capture)
-The raw image captured by the internal camera is processed to extract marker centroids and IDs. The specific implementation of this algorithm is available in [`marker_extraction.py`](./Algorithm/marker_extraction.py). Figure 3 compares the dynamic 2D feature extraction process with the recognized 2D marker array from a static frame.
+The raw image captured by the internal camera is processed to extract marker centroids and IDs. The specific implementation is available in the [`Marker_Tracking`](./code/Marker_Tracking) directory. Figure 3 illustrates the dynamic 2D feature extraction process and the recognized 2D marker array from a static frame.
 
 <div align="center">
   <table>
@@ -49,11 +47,11 @@ The raw image captured by the internal camera is processed to extract marker cen
 </div>
 
 ### B. 3D Displacement Field Reconstruction
-Based on the 2D feature changes, the 3D displacement vectors are reconstructed using geometric constraints. The complete reconstruction pipeline is provided in the [`Marker_Calibration`](./Marker_Calibration) directory, which includes:
+Based on the 2D feature changes, the 3D displacement vectors are reconstructed using geometric constraints. The complete reconstruction pipeline is provided in the [`Marker_Calibration`](./code/Marker_Calibration) directory:
 
-*   **Intrinsic Matrix Fitting:** [`intrinsic_calibration.py`](./Marker_Calibration/intrinsic_calibration.py) for camera parameter estimation (Figure 4 (a)).
-*   **Extrinsic Matrix Fitting:** [`extrinsic_calibration.py`](./Marker_Calibration/extrinsic_calibration.py) for coordinate system alignment (Figure 4 (b)).
-*   **3D Reconstruction:** [`3d_reconstruction.py`](./Marker_Calibration/3d_reconstruction.py) for resolving the spatial displacement field (Figure 4 (c)).
+*   **Intrinsic Matrix Fitting:** [`intrinsic_calibration.py`](./code/Marker_Calibration/intrinsic_calibration.py) for camera parameter estimation (Figure 4 (a)).
+*   **Extrinsic Matrix Fitting:** [`extrinsic_calibration.py`](./code/Marker_Calibration/extrinsic_calibration.py) for coordinate system alignment (Figure 4 (b)).
+*   **3D Reconstruction:** [`3d_reconstruction.py`](./code/Marker_Calibration/3d_reconstruction.py) for resolving the spatial displacement field (Figure 4 (c)).
 
 <div align="center">
   <table>
@@ -72,8 +70,6 @@ Based on the 2D feature changes, the 3D displacement vectors are reconstructed u
   </table>
 </div>
 
-The figure below visualizes the resulting **3D displacement vector field**.
-
 <div align="center">
   <img src="./img/3d_vector_placeholder.png" alt="3D Displacement Vector Field" width="700"/>
   <br />
@@ -85,7 +81,7 @@ The figure below visualizes the resulting **3D displacement vector field**.
 To ensure measurement reliability, we performed the following two-step accuracy validation:
 
 #### 1. Geometric Validation (Marker Diameter)
-First, the absolute diameter of the rigid markers was validated, and the results are illustrated in Figure 5.
+First, the absolute diameter of the rigid markers was validated (Figure 5).
 
 <div align="center">
   <table>
@@ -125,7 +121,7 @@ To validate the algorithmic accuracy, a precision probe indentation test was per
 </div>
 
 ### D. Pose Misalignment Identification
-This module implements the "Reference State Comparison" strategy. By analyzing the deviation of the 3D displacement field, a spatial contact plane is fitted to identify the tilt angle.
+This module implements the reference state comparison strategy. By analyzing the deviation of the 3D displacement field, a spatial contact plane is fitted to identify the tilt angle.
 
 <div align="center">
   <img src="./img/MarkerDistribution1.png" alt="Pose Fitting Result" width="700"/>
@@ -147,7 +143,7 @@ In this scenario, the bonnet tool is pressed vertically against the workpiece ($
 </div>
 
 ### B. Tilted Compression
-In this scenario, the tool is pressed against the workpiece surface at a standard polishing precession angle of **15°**. The sensor captures the asymmetric marker displacement characteristic of this pose, which serves as the reference state for subsequent misalignment detection. Figure 9 illustrates the physical setup and the internal camera view during tilted compression.
+In this scenario, the tool is pressed against the workpiece surface at a standard polishing precession angle of **15°**. The sensor captures the marker displacement characteristic of this pose, which serves as the reference state for subsequent misalignment detection. Figure 9 illustrates the physical setup and the internal camera view during tilted compression.
 
 <div align="center">
   <img src="./img/tilted_compression.gif" width="800"/>
