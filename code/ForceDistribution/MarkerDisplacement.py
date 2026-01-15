@@ -11,7 +11,7 @@ import traceback
 TARGET_FRAME = 0 # 目标帧编号 (用于第一个函数)
 
 # --- 新增位移图配置 ---
-TARGET_MARKER_ID = 9 # 目标标记点编号 (例如：1)
+TARGET_MARKER_ID = 1 # 目标标记点编号 (例如：1)
 # 模式选择: 'XYZ' (绘制X, Y, Z轴随时间变化) 或 'SCALAR' (绘制相对于起始点的总位移)
 DISPLACEMENT_MODE = 'SCALAR' 
 
